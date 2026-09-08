@@ -35,7 +35,7 @@ orange = (255, 138, 61)
 muted = (150, 165, 190)
 
 d.text((80, 150), "RocketBucket", font=bold, fill=ink)
-d.text((80, 262), "The feel of CuteFTP.", font=med, fill=orange)
+d.text((80, 262), "The feel of FTP.", font=med, fill=orange)
 d.text((80, 310), "The world of S3.", font=med, fill=orange)
 d.text((80, 392), "Dual-pane file transfers for S3, R2, B2 & MinIO —", font=small, fill=muted)
 d.text((80, 428), "sandboxed on your Mac, keys in the Keychain.", font=small, fill=muted)
