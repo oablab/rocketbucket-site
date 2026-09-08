@@ -42,6 +42,8 @@
     <h1><em>FTP</em>의 손맛,<br>S3의 세계</h1>
     <p class="sub">Amazon S3, Cloudflare R2, Backblaze B2, MinIO를 위한 듀얼 페인 파일 전송 앱.<br class="desktop-br">S3 API를 말하는 곳이라면 어디든. 끌어다 놓으면 업로드, 꺼내면 다운로드.<br class="desktop-br">30년 전에 몸에 밴 습관, 여기서는 하나도 바꿀 필요가 없습니다.</p>
 
+
+    <p class="taglines" data-lines='["30년 전에 이미 쓸 줄 알았던 도구.", "FTP의 손맛, S3의 세계.", "끌어다 놓으면, 업로드.", "당신의 클라우드 스토리지에 드디어 한눈에 이해되는 도구가 생겼습니다.", "FTP에서 S3까지, 30년 만에 그 손맛이 돌아왔습니다."]'><span>30년 전에 이미 쓸 줄 알았던 도구.</span></p>
     <div class="cta-row">
       <span class="cta pending">곧 Mac App Store 출시<small>출시 임박 — 기대해 주세요</small></span>
       <a class="cta secondary" href="#story">스토리 읽기</a>
@@ -190,5 +192,29 @@
     <a href="/privacy/">개인정보 처리방침</a>·<a href="mailto:tautiu.dev@gmail.com">지원</a>·<a href="/">EN</a><a href="/zh/">中文</a><a href="/ja/">日本語</a>
     <span class="fineprint">© 2026 RocketBucket. Amazon S3, Cloudflare R2, Backblaze B2, MinIO, CuteFTP는 각 소유자의 상표입니다. RocketBucket은 독립 제품이며 위 업체들과 제휴·보증 관계가 없습니다.</span>
   </footer>
+
+  <script>
+    (function () {
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        var s = document.querySelector(".taglines span");
+        if (s) s.classList.add("show");
+        return;
+      }
+      var box = document.querySelector(".taglines");
+      if (!box) return;
+      var el = box.querySelector("span");
+      var lines = JSON.parse(box.dataset.lines);
+      var i = 0;
+      el.classList.add("show");
+      setInterval(function () {
+        el.classList.remove("show");
+        setTimeout(function () {
+          i = (i + 1) % lines.length;
+          el.textContent = lines[i];
+          el.classList.add("show");
+        }, 620);
+      }, 4200);
+    })();
+  </script>
 </body>
 </html>

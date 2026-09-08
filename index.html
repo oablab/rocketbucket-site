@@ -67,6 +67,8 @@
     <h1>The feel of <em>FTP</em>,<br>the world of S3</h1>
     <p class="sub">A dual-pane file transfer app for Amazon S3, Cloudflare R2, Backblaze B2, MinIO —<br class="desktop-br">anything that speaks the S3 API. Drag in to upload, drag out to download.<br class="desktop-br">The habits you built thirty years ago still work here, unchanged.</p>
 
+
+    <p class="taglines" data-lines='["You already knew how to use it thirty years ago.", "The feel of FTP, the world of S3.", "Drag in. It&#39;s uploaded.", "Your cloud storage finally has a tool you understand at a glance.", "From FTP to S3 — thirty years later, the feel is back."]'><span>You already knew how to use it thirty years ago.</span></p>
     <div class="cta-row">
       <span class="cta pending">Coming to the Mac App Store<small>Follow along — launch is close</small></span>
       <a class="cta secondary" href="#story">Read the story</a>
@@ -215,5 +217,29 @@
     <a href="/privacy/">Privacy</a>·<a href="mailto:tautiu.dev@gmail.com">Support</a>·<a href="/zh/">中文</a><a href="/ja/">日本語</a><a href="/ko/">한국어</a>
     <span class="fineprint">© 2026 RocketBucket. Amazon S3, Cloudflare R2, Backblaze B2, MinIO and CuteFTP are trademarks of their respective owners; RocketBucket is an independent product and is not affiliated with or endorsed by them.</span>
   </footer>
+
+  <script>
+    (function () {
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        var s = document.querySelector(".taglines span");
+        if (s) s.classList.add("show");
+        return;
+      }
+      var box = document.querySelector(".taglines");
+      if (!box) return;
+      var el = box.querySelector("span");
+      var lines = JSON.parse(box.dataset.lines);
+      var i = 0;
+      el.classList.add("show");
+      setInterval(function () {
+        el.classList.remove("show");
+        setTimeout(function () {
+          i = (i + 1) % lines.length;
+          el.textContent = lines[i];
+          el.classList.add("show");
+        }, 620);
+      }, 4200);
+    })();
+  </script>
 </body>
 </html>

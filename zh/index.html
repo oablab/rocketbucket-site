@@ -42,6 +42,8 @@
     <h1><em>FTP</em> 的手感，<br>S3 的世界</h1>
     <p class="sub">給 Amazon S3、Cloudflare R2、Backblaze B2、MinIO 的雙欄檔案傳輸工具——<br class="desktop-br">只要說 S3 協議的都行。拖進去就是上傳，拉出來就是下載。<br class="desktop-br">你三十年前養成的操作習慣，在這裡一個都不用改。</p>
 
+
+    <p class="taglines" data-lines='["三十年前你就會用了。", "FTP 的手感，S3 的世界。", "拖進去，就上傳。", "你的雲端儲存，終於有了一個看一眼就會用的工具。", "從 FTP 到 S3，三十年後，順手的感覺回來了。"]'><span>三十年前你就會用了。</span></p>
     <div class="cta-row">
       <span class="cta pending">即將上架 Mac App Store<small>就快了——敬請期待</small></span>
       <a class="cta secondary" href="#story">看看這個故事</a>
@@ -190,5 +192,29 @@
     <a href="/privacy/">隱私權政策</a>·<a href="mailto:tautiu.dev@gmail.com">支援</a>·<a href="/">EN</a><a href="/ja/">日本語</a><a href="/ko/">한국어</a>
     <span class="fineprint">© 2026 RocketBucket。Amazon S3、Cloudflare R2、Backblaze B2、MinIO 與 CuteFTP 為其各自所有者之商標；RocketBucket 為獨立產品，與上述廠商並無隸屬或背書關係。</span>
   </footer>
+
+  <script>
+    (function () {
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        var s = document.querySelector(".taglines span");
+        if (s) s.classList.add("show");
+        return;
+      }
+      var box = document.querySelector(".taglines");
+      if (!box) return;
+      var el = box.querySelector("span");
+      var lines = JSON.parse(box.dataset.lines);
+      var i = 0;
+      el.classList.add("show");
+      setInterval(function () {
+        el.classList.remove("show");
+        setTimeout(function () {
+          i = (i + 1) % lines.length;
+          el.textContent = lines[i];
+          el.classList.add("show");
+        }, 620);
+      }, 4200);
+    })();
+  </script>
 </body>
 </html>
