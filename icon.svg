@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1B2536"/>
+      <stop offset="1" stop-color="#0E1420"/>
+    </linearGradient>
+    <linearGradient id="flame" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFB25C"/>
+      <stop offset="1" stop-color="#F2600C"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="url(#bg)"/>
+  <!-- stars -->
+  <circle cx="26" cy="26" r="2" fill="#8FA3C4" opacity="0.8"/>
+  <circle cx="104" cy="34" r="1.6" fill="#8FA3C4" opacity="0.65"/>
+  <circle cx="90" cy="16" r="1.2" fill="#8FA3C4" opacity="0.5"/>
+  <circle cx="20" cy="58" r="1.4" fill="#8FA3C4" opacity="0.5"/>
+  <circle cx="110" cy="62" r="1.3" fill="#8FA3C4" opacity="0.55"/>
+  <!-- rocket -->
+  <g transform="translate(64 14)">
+    <path d="M0 0 C10 10 14 24 14 38 L14 52 L-14 52 L-14 38 C-14 24 -10 10 0 0 Z" fill="#F4F1EA"/>
+    <path d="M0 0 C10 10 14 24 14 38 L14 52 L2 52 L2 10 C1 6 0.6 3 0 0 Z" fill="#D9D2C4"/>
+    <circle cx="0" cy="27" r="8.5" fill="#1B2536"/>
+    <circle cx="0" cy="27" r="5.5" fill="#5C89C9"/>
+    <path d="M-14 40 L-24 54 L-14 54 Z" fill="#F2600C"/>
+    <path d="M14 40 L24 54 L14 54 Z" fill="#F2600C"/>
+    <path d="M0 52 C5 58 4 64 0 70 C-4 64 -5 58 0 52 Z" fill="url(#flame)"/>
+  </g>
+  <!-- bucket -->
+  <g>
+    <path d="M28 88 L100 88 L92 116 C91.5 118.5 89.5 120 87 120 L41 120 C38.5 120 36.5 118.5 36 116 Z" fill="#F2600C"/>
+    <ellipse cx="64" cy="88" rx="36" ry="7" fill="#FF8A3D"/>
+    <ellipse cx="64" cy="88" rx="29" ry="4.6" fill="#B84A08"/>
+  </g>
+</svg>

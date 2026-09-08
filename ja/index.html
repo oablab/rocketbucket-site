@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RocketBucket — CuteFTP の手ざわり、S3 の世界</title>
+  <meta name="description" content="RocketBucket は Amazon S3、Cloudflare R2、Backblaze B2、MinIO のためのデュアルペイン・ファイル転送アプリ。S3 API を話すものなら何でも。ドラッグすればアップロード、引き出せばダウンロード。Apple サンドボックスで動作し、キーは Keychain に保存、並列転送対応。">
+  <meta property="og:title" content="RocketBucket">
+  <meta property="og:description" content="CuteFTP の手ざわり、S3 の世界。Amazon S3、Cloudflare R2、Backblaze B2、MinIO のためのデュアルペイン・ファイル転送アプリ——Apple サンドボックスで動作。">
+  <meta property="og:image" content="https://rocketbucket.app/og-card.png">
+  <meta property="og:url" content="https://rocketbucket.app/ja/">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="alternate" hreflang="en" href="https://rocketbucket.app/">
+  <link rel="alternate" hreflang="zh-Hant" href="https://rocketbucket.app/zh/">
+  <link rel="alternate" hreflang="ja" href="https://rocketbucket.app/ja/">
+  <link rel="alternate" hreflang="ko" href="https://rocketbucket.app/ko/">
+  <link rel="alternate" hreflang="x-default" href="https://rocketbucket.app/">
+  <link rel="icon" type="image/svg+xml" href="/icon.svg">
+  <link rel="icon" type="image/png" href="/icon.png">
+  <link rel="apple-touch-icon" href="/icon.png">
+  <link rel="stylesheet" href="/site.css">
+  <script>
+    document.addEventListener("click", function (event) {
+      var link = event.target.closest(".lang a");
+      if (!link) return;
+      try { localStorage.setItem("rocketbucket-lang", link.getAttribute("href")); } catch (e) {}
+    });
+  </script>
+</head>
+<body>
+  <nav>
+    <a class="brand" href="/ja/"><img src="/icon.png" alt="" width="28" height="28">RocketBucket</a>
+    <div class="links">
+      <a href="#story">ストーリー</a>
+      <a href="#features">機能</a>
+      <a href="#faq">FAQ</a>
+      <a href="mailto:tautiu.dev@gmail.com">サポート</a>
+      <span class="lang"><a href="/zh/">中文</a>|<a class="active" href="/ja/">日本語</a>|<a href="/ko/">한국어</a>|<a href="/">EN</a></span>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <h1><em>CuteFTP</em> の手ざわり、<br>S3 の世界</h1>
+    <p class="sub">Amazon S3、Cloudflare R2、Backblaze B2、MinIO のためのデュアルペイン・ファイル転送アプリ。<br class="desktop-br">S3 API を話すものなら何でも。ドラッグすればアップロード、引き出せばダウンロード。<br class="desktop-br">30 年前に身についた操作の習慣を、ひとつも変える必要はありません。</p>
+
+    <div class="cta-row">
+      <span class="cta pending">まもなく Mac App Store に登場<small>リリース間近——お楽しみに</small></span>
+      <a class="cta secondary" href="#story">ストーリーを読む</a>
+    </div>
+
+    <div class="mockup-wrap">
+      <div class="mockup" role="img" aria-label="RocketBucket のウィンドウ：左にローカルフォルダ、右に S3 バケット、その間でファイルが転送されている">
+        <div class="titlebar">
+          <div class="dots"><span></span><span></span><span></span></div>
+          <div class="title">RocketBucket</div>
+        </div>
+        <div class="panes">
+          <div class="pane">
+            <div class="pane-head"><span class="chip">LOCAL</span>~/Projects/site</div>
+            <div class="row"><span class="name">index.html</span><span class="size">12 KB</span></div>
+            <div class="row"><span class="name">styles.css</span><span class="size">8 KB</span></div>
+            <div class="row hot"><span class="name">photos-2026.zip</span><span class="size">1.2 GB</span></div>
+            <div class="row"><span class="name">video-master.mp4</span><span class="size">640 MB</span></div>
+            <div class="row dim"><span class="name">assets/</span><span class="size">318 項目</span></div>
+            <div class="row dim"><span class="name">backup/</span><span class="size">4,102 項目</span></div>
+          </div>
+          <div class="mid" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </div>
+          <div class="pane">
+            <div class="pane-head"><span class="chip">S3</span>my-bucket/production</div>
+            <div class="row"><span class="name">index.html</span><span class="size">12 KB</span></div>
+            <div class="row"><span class="name">styles.css</span><span class="size">8 KB</span></div>
+            <div class="row hot"><span class="name">photos-2026.zip</span><span class="size">66%</span></div>
+            <div class="row dim"><span class="name">assets/</span><span class="size">318 項目</span></div>
+            <div class="row dim"><span class="name">releases/</span><span class="size">27 項目</span></div>
+            <div class="row dim"><span class="name">logs/</span><span class="size">1,930 項目</span></div>
+          </div>
+        </div>
+        <div class="statusbar">
+          <span>photos-2026.zip をアップロード中——マルチパート、6 並列ストリーム</span>
+          <span class="bar"></span>
+          <span>84 MB/s</span>
+        </div>
+      </div>
+      <p class="mockup-caption">左はあなたの Mac、右はあなたのバケット。ドラッグする——マニュアルはこの一行だけ。</p>
+    </div>
+  </header>
+
+  <section class="story" id="story">
+    <h2 class="section-title">30 年前、私たちはすでに答えを知っていた</h2>
+    <p class="section-sub">ファイル転送の短い歴史——そして、なぜ RocketBucket を作ったのか。</p>
+
+    <div class="era">
+      <div class="year">1996</div>
+      <div class="body">
+        <h3>FTP はインターネットの共通言語だった</h3>
+        <p>そして CuteFTP はあの時代でいちばん手になじむツールでした。左に自分のマシン、右にリモートサーバー。真ん中をドラッグすれば、ファイルは向こうへ渡る。マニュアルもコマンド引数もなし、ひと目で使い方がわかる。多くの人の最初のウェブサイト、最初のバックアップ、最初にクライアントへ納品したファイルは、あのデュアルペインのウィンドウから送り出されたのです。</p>
+      </div>
+    </div>
+
+    <div class="era">
+      <div class="year">2006</div>
+      <div class="body">
+        <h3>ルールが書き換えられた</h3>
+        <p>2006 年 3 月 14 日、AWS が S3 を発表。それから 20 年、S3 はもはや単なるサービスではなく、クラウドストレージの事実上の標準になりました。Cloudflare R2、Google Cloud Storage の XML API、Backblaze B2、MinIO——今日名前の挙がるオブジェクトストレージは、ほぼすべて同じ言葉を話します。</p>
+      </div>
+    </div>
+
+    <div class="era now">
+      <div class="year">現在</div>
+      <div class="body">
+        <h3>プロトコルは変わった。ツールは追いつかなかった。</h3>
+        <p>いま手元にあるのは CLI、SDK、そしてファイルひとつアップロードするのにドキュメントを 3 ページ読まされるコンソール。速い——でも、ひと目でわかるものではなくなってしまった。</p>
+      </div>
+    </div>
+
+    <p class="punch">だから RocketBucket を作りました。<br><strong>ドラッグすればアップロード、引き出せばダウンロード。</strong><br>30 年前に身についた習慣を、ひとつも変える必要はありません。</p>
+  </section>
+
+  <section class="features" id="features">
+    <h2 class="section-title" style="text-align:center">セキュリティとスピード。それだけ。</h2>
+    <p class="section-sub" style="text-align:center; margin-left:auto; margin-right:auto;">ほかのすべては、この 2 つから生まれています。</p>
+    <div class="features-grid">
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="8.5" height="16" rx="1.5"/><rect x="13.5" y="4" width="8.5" height="16" rx="1.5"/><path d="M9 12h6M13 10l2 2-2 2"/></svg></div>
+        <h3>デュアルペイン、ドラッグ＆ドロップ</h3>
+        <p>左が転送元、右が転送先。ファイルも、フォルダも、ツリーごとでも——ドラッグすれば転送が始まります。インターフェイスそのものがマニュアルです。</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg></div>
+        <h3>S3 を話す場所ならどこへでも</h3>
+        <p>Amazon S3、Cloudflare R2、Backblaze B2、MinIO、そして S3 互換のあらゆるエンドポイント。すべての側が双方向——ローカル↔クラウドも、クラウド↔クラウドも。</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+        <h3>サンドボックスで動作</h3>
+        <p>RocketBucket は Apple の App Sandbox 内で最小権限で動きます。触れるのはあなたが渡したフォルダだけ。Mac のほかの場所には一切触れません。</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.6 7.6a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg></div>
+        <h3>キーは Keychain に</h3>
+        <p>シークレットキーは macOS の Keychain に保存され、ディスク上の設定ファイルには決して書き込まれません。IAM Identity Center（AWS SSO）でのサインインにも、アクセスキーの貼り付けにも対応。</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/></svg></div>
+        <h3>並列マルチパート転送</h3>
+        <p>大きなファイルは並列マルチパートで、数千の小さなファイルは複数コネクションに分散して。どちらのケースも、ドラッグ 1 回で片づきます。</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></div>
+        <h3>SDK なし、余計なものなし</h3>
+        <p>S3 の署名は URLSession 上に手書きした SigV4 実装で、実際の AWS S3 と MinIO に対して検証済み。依存ゼロ——何もこっそり送信しません。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="faq" id="faq">
+    <h2 class="section-title" style="text-align:center">よくある質問</h2>
+    <details>
+      <summary>どのサービスに対応していますか？</summary>
+      <p>Amazon S3、Cloudflare R2、Backblaze B2、MinIO、そして S3 API を実装するあらゆるエンドポイント。ローカルフォルダも一級のエンドポイントなので、ローカル↔クラウドもクラウド↔クラウドも同じ使い方です。</p>
+    </details>
+    <details>
+      <summary>データはあなたたちのサーバーを経由しますか？</summary>
+      <p>いいえ。転送はあなたの Mac からストレージのエンドポイントへ、TLS で直接行われます。中継サーバーもアカウント登録も、アナリティクスもありません。</p>
+    </details>
+    <details>
+      <summary>認証情報はどこに保存されますか？</summary>
+      <p>シークレットアクセスキーは macOS の Keychain に保存され、ディスク上の設定ファイルには書き込まれません。IAM Identity Center（AWS SSO）でサインインすれば、長期キーを一切残さず短期認証情報だけで使うこともできます。</p>
+    </details>
+    <details>
+      <summary>本当に CuteFTP みたいに使えますか？</summary>
+      <p>レイアウトは同じです：2 つのペイン、左が転送元、右が転送先、間をドラッグ。変わったのは中身——FTP の代わりに SigV4 署名の S3 リクエストと並列マルチパート転送——そしてセキュリティモデル：サンドボックス動作、キーは Keychain に。</p>
+    </details>
+    <details>
+      <summary>いつ使えるようになりますか？</summary>
+      <p>RocketBucket はまもなく Mac App Store に登場します。公開当日、このページにダウンロードボタンが並びます。</p>
+    </details>
+  </section>
+
+  <div class="bottom-cta">
+    <h2>一度聞いたら、忘れられない。</h2>
+    <p>一度使ったら、もう戻れない。</p>
+    <div class="cta-row">
+      <span class="cta pending">RocketBucket——まもなく Mac App Store に登場</span>
+    </div>
+  </div>
+
+  <footer>
+    <a href="/privacy/">プライバシー</a>·<a href="mailto:tautiu.dev@gmail.com">サポート</a>·<a href="/">EN</a><a href="/zh/">中文</a><a href="/ko/">한국어</a>
+    <span class="fineprint">© 2026 RocketBucket。Amazon S3、Cloudflare R2、Backblaze B2、MinIO、CuteFTP は各所有者の商標です。RocketBucket は独立した製品であり、上記各社との提携・承認関係はありません。</span>
+  </footer>
+</body>
+</html>

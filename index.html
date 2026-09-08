@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RocketBucket — The feel of CuteFTP, the world of S3</title>
+  <meta name="description" content="RocketBucket is a dual-pane file transfer app for Amazon S3, Cloudflare R2, Backblaze B2, MinIO — anything that speaks the S3 API. Drag in to upload, drag out to download. Sandboxed on your Mac, keys in the Keychain, parallel transfers.">
+  <meta property="og:title" content="RocketBucket">
+  <meta property="og:description" content="The feel of CuteFTP, the world of S3. Dual-pane file transfers for Amazon S3, Cloudflare R2, Backblaze B2 and MinIO — sandboxed on your Mac.">
+  <meta property="og:image" content="https://rocketbucket.app/og-card.png">
+  <meta property="og:url" content="https://rocketbucket.app">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="alternate" hreflang="en" href="https://rocketbucket.app/">
+  <link rel="alternate" hreflang="zh-Hant" href="https://rocketbucket.app/zh/">
+  <link rel="alternate" hreflang="ja" href="https://rocketbucket.app/ja/">
+  <link rel="alternate" hreflang="ko" href="https://rocketbucket.app/ko/">
+  <link rel="alternate" hreflang="x-default" href="https://rocketbucket.app/">
+  <link rel="icon" type="image/svg+xml" href="/icon.svg">
+  <link rel="icon" type="image/png" href="/icon.png">
+  <link rel="apple-touch-icon" href="/icon.png">
+  <link rel="stylesheet" href="/site.css">
+  <script>
+    // Remember an explicit language choice; the root page honours it on
+    // future visits instead of re-guessing from the browser locale.
+    document.addEventListener("click", function (event) {
+      var link = event.target.closest(".lang a");
+      if (!link) return;
+      try { localStorage.setItem("rocketbucket-lang", link.getAttribute("href")); } catch (e) {}
+    });
+  </script>
+  <script>
+    // First visit only: route to the matching translation. An explicit choice
+    // (stored on click) and ?lang=en both win, so nobody gets trapped.
+    (function () {
+      var params = new URLSearchParams(location.search);
+      if (params.get("lang") === "en") return;
+      var saved = null;
+      try { saved = localStorage.getItem("rocketbucket-lang"); } catch (e) {}
+      if (saved) {
+        if (saved !== "/") location.replace(saved);
+        return;
+      }
+      var map = [[/^zh/i, "/zh/"], [/^ja/i, "/ja/"], [/^ko/i, "/ko/"]];
+      var langs = navigator.languages && navigator.languages.length
+        ? navigator.languages : [navigator.language || ""];
+      for (var i = 0; i < langs.length; i++) {
+        for (var j = 0; j < map.length; j++) {
+          if (map[j][0].test(langs[i])) { location.replace(map[j][1]); return; }
+        }
+        if (/^en/i.test(langs[i])) return; // English preferred before any match
+      }
+    })();
+  </script>
+</head>
+<body>
+  <nav>
+    <a class="brand" href="/"><img src="/icon.png" alt="" width="28" height="28">RocketBucket</a>
+    <div class="links">
+      <a href="#story">The story</a>
+      <a href="#features">Features</a>
+      <a href="#faq">FAQ</a>
+      <a href="mailto:tautiu.dev@gmail.com">Support</a>
+      <span class="lang"><a href="/zh/">中文</a>|<a href="/ja/">日本語</a>|<a href="/ko/">한국어</a>|<a class="active" href="/">EN</a></span>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <h1>The feel of <em>CuteFTP</em>,<br>the world of S3</h1>
+    <p class="sub">A dual-pane file transfer app for Amazon S3, Cloudflare R2, Backblaze B2, MinIO —<br class="desktop-br">anything that speaks the S3 API. Drag in to upload, drag out to download.<br class="desktop-br">The habits you built thirty years ago still work here, unchanged.</p>
+
+    <div class="cta-row">
+      <span class="cta pending">Coming to the Mac App Store<small>Follow along — launch is close</small></span>
+      <a class="cta secondary" href="#story">Read the story</a>
+    </div>
+
+    <div class="mockup-wrap">
+      <div class="mockup" role="img" aria-label="RocketBucket window: a local folder on the left, an S3 bucket on the right, files transferring between them">
+        <div class="titlebar">
+          <div class="dots"><span></span><span></span><span></span></div>
+          <div class="title">RocketBucket</div>
+        </div>
+        <div class="panes">
+          <div class="pane">
+            <div class="pane-head"><span class="chip">LOCAL</span>~/Projects/site</div>
+            <div class="row"><span class="name">index.html</span><span class="size">12 KB</span></div>
+            <div class="row"><span class="name">styles.css</span><span class="size">8 KB</span></div>
+            <div class="row hot"><span class="name">photos-2026.zip</span><span class="size">1.2 GB</span></div>
+            <div class="row"><span class="name">video-master.mp4</span><span class="size">640 MB</span></div>
+            <div class="row dim"><span class="name">assets/</span><span class="size">318 items</span></div>
+            <div class="row dim"><span class="name">backup/</span><span class="size">4,102 items</span></div>
+          </div>
+          <div class="mid" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </div>
+          <div class="pane">
+            <div class="pane-head"><span class="chip">S3</span>my-bucket/production</div>
+            <div class="row"><span class="name">index.html</span><span class="size">12 KB</span></div>
+            <div class="row"><span class="name">styles.css</span><span class="size">8 KB</span></div>
+            <div class="row hot"><span class="name">photos-2026.zip</span><span class="size">66%</span></div>
+            <div class="row dim"><span class="name">assets/</span><span class="size">318 items</span></div>
+            <div class="row dim"><span class="name">releases/</span><span class="size">27 items</span></div>
+            <div class="row dim"><span class="name">logs/</span><span class="size">1,930 items</span></div>
+          </div>
+        </div>
+        <div class="statusbar">
+          <span>Uploading photos-2026.zip — multipart, 6 parallel streams</span>
+          <span class="bar"></span>
+          <span>84 MB/s</span>
+        </div>
+      </div>
+      <p class="mockup-caption">Left pane: your Mac. Right pane: your bucket. Drag across — that's the whole manual.</p>
+    </div>
+  </header>
+
+  <section class="story" id="story">
+    <h2 class="section-title">Thirty years ago, we already knew how this should work</h2>
+    <p class="section-sub">A short history of moving files — and why we built RocketBucket.</p>
+
+    <div class="era">
+      <div class="year">1996</div>
+      <div class="body">
+        <h3>FTP was the internet's common language</h3>
+        <p>And CuteFTP was the tool of its era: your machine on the left, the remote server on the right, drag across the middle and the file went up. No manual, no command flags — you understood it at a glance. Many people's first website, first backup, first file delivered to a client left through that dual-pane window.</p>
+      </div>
+    </div>
+
+    <div class="era">
+      <div class="year">2006</div>
+      <div class="body">
+        <h3>The rules were rewritten</h3>
+        <p>On March 14, 2006, AWS launched S3. Twenty years on, it is no longer just a service — it is the de facto standard for cloud storage. Cloudflare R2, Google Cloud Storage's XML API, Backblaze B2, MinIO: nearly every object store you can name today speaks the same language.</p>
+      </div>
+    </div>
+
+    <div class="era now">
+      <div class="year">Today</div>
+      <div class="body">
+        <h3>The protocol changed. The tools didn't keep up.</h3>
+        <p>Now we have CLIs, SDKs, and web consoles that want three pages of documentation before you can upload a single file. Fast — but no longer something you understand at a glance.</p>
+      </div>
+    </div>
+
+    <p class="punch">So we built RocketBucket.<br><strong>Drag in to upload. Drag out to download.</strong><br>Not one habit you formed thirty years ago needs to change.</p>
+  </section>
+
+  <section class="features" id="features">
+    <h2 class="section-title" style="text-align:center">Security and speed. That's the whole list.</h2>
+    <p class="section-sub" style="text-align:center; margin-left:auto; margin-right:auto;">Everything else follows from those two.</p>
+    <div class="features-grid">
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="8.5" height="16" rx="1.5"/><rect x="13.5" y="4" width="8.5" height="16" rx="1.5"/><path d="M9 12h6M13 10l2 2-2 2"/></svg></div>
+        <h3>Dual-pane, drag &amp; drop</h3>
+        <p>Source on the left, destination on the right. Files, folders, whole trees — drag across and they move. The interface is the manual.</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg></div>
+        <h3>Speaks S3, everywhere</h3>
+        <p>Amazon S3, Cloudflare R2, Backblaze B2, MinIO, and any S3-compatible endpoint. Every side is bidirectional — local↔cloud and cloud↔cloud both just work.</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+        <h3>Sandboxed by design</h3>
+        <p>RocketBucket runs inside the Apple App Sandbox with least privilege. It touches only the folders you hand it — nothing else on your Mac.</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.6 7.6a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg></div>
+        <h3>Keys live in the Keychain</h3>
+        <p>Secret keys are stored in the macOS Keychain, never in config files on disk. Sign in with IAM Identity Center (AWS SSO) or paste access keys — your call.</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/></svg></div>
+        <h3>Parallel, multipart transfers</h3>
+        <p>Big files go up in parallel multipart streams; thousands of small files fan out across connections. One drag handles either case.</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></div>
+        <h3>No SDK, no bloat</h3>
+        <p>S3 signing is a hand-rolled SigV4 implementation over URLSession, verified against real AWS S3 and MinIO. Zero dependencies — nothing phones home.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="faq" id="faq">
+    <h2 class="section-title" style="text-align:center">FAQ</h2>
+    <details>
+      <summary>Which services does RocketBucket work with?</summary>
+      <p>Amazon S3, Cloudflare R2, Backblaze B2, MinIO, and any other endpoint that implements the S3 API. Local folders are first-class endpoints too, so local↔cloud and cloud↔cloud pairings all work the same way.</p>
+    </details>
+    <details>
+      <summary>Does my data pass through your servers?</summary>
+      <p>No. Transfers go directly from your Mac to your storage endpoint over TLS. There is no relay, no account with us, and no analytics.</p>
+    </details>
+    <details>
+      <summary>Where are my credentials stored?</summary>
+      <p>Secret access keys are stored in the macOS Keychain — never written to configuration files on disk. You can also sign in through IAM Identity Center (AWS SSO) for short-lived credentials with no long-term secret at all.</p>
+    </details>
+    <details>
+      <summary>Is it really like CuteFTP?</summary>
+      <p>The layout is: two panes, your source on the left, your destination on the right, drag between them. What changed underneath is the protocol — SigV4-signed S3 requests with parallel multipart transfers instead of FTP — and the security model: sandboxed, keys in the Keychain.</p>
+    </details>
+    <details>
+      <summary>When can I get it?</summary>
+      <p>RocketBucket is coming to the Mac App Store. This page will carry the download button the day it is live.</p>
+    </details>
+  </section>
+
+  <div class="bottom-cta">
+    <h2>Hear it once and you won't forget it.</h2>
+    <p>Use it once and you won't go back.</p>
+    <div class="cta-row">
+      <span class="cta pending">RocketBucket — coming to the Mac App Store</span>
+    </div>
+  </div>
+
+  <footer>
+    <a href="/privacy/">Privacy</a>·<a href="mailto:tautiu.dev@gmail.com">Support</a>·<a href="/zh/">中文</a><a href="/ja/">日本語</a><a href="/ko/">한국어</a>
+    <span class="fineprint">© 2026 RocketBucket. Amazon S3, Cloudflare R2, Backblaze B2, MinIO and CuteFTP are trademarks of their respective owners; RocketBucket is an independent product and is not affiliated with or endorsed by them.</span>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy Policy — RocketBucket</title>
+  <meta name="description" content="RocketBucket privacy policy: no accounts, no analytics, no data collection. Transfers go directly from your Mac to your storage endpoints.">
+  <meta name="robots" content="noindex">
+  <link rel="icon" type="image/svg+xml" href="/icon.svg">
+  <link rel="icon" type="image/png" href="/icon.png">
+  <link rel="stylesheet" href="/site.css">
+  <style>
+    main.legal { max-width: 720px; margin: 0 auto; padding: 3rem 1.5rem 4rem; }
+    main.legal h1 { font-family: "New York", Georgia, serif; font-size: 2rem; margin-bottom: 0.4rem; }
+    main.legal .updated { color: var(--muted); font-size: 0.88rem; margin-bottom: 2rem; }
+    main.legal h2 { font-size: 1.15rem; margin: 1.8rem 0 0.4rem; }
+    main.legal p { color: var(--muted); font-size: 0.97rem; margin-bottom: 0.8rem; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a class="brand" href="/"><img src="/icon.png" alt="" width="28" height="28">RocketBucket</a>
+    <div class="links">
+      <a href="/#story">The story</a>
+      <a href="/#features">Features</a>
+      <a href="/#faq">FAQ</a>
+      <a href="mailto:tautiu.dev@gmail.com">Support</a>
+    </div>
+  </nav>
+  <main class="legal">
+    <h1>Privacy Policy</h1>
+    <p class="updated">Last updated: September 8, 2026</p>
+
+    <h2>The short version</h2>
+    <p>RocketBucket collects nothing. There is no account, no sign-up, no analytics, no crash reporting service, and no server of ours involved in anything you transfer.</p>
+
+    <h2>Your files</h2>
+    <p>File transfers go directly from your Mac to the storage endpoints you configure (such as Amazon S3, Cloudflare R2, Backblaze B2, or MinIO) over TLS. Your files never pass through any server operated by us.</p>
+
+    <h2>Your credentials</h2>
+    <p>Secret access keys are stored in the macOS Keychain on your device. They are never written to configuration files on disk and never transmitted anywhere except to the storage endpoint they belong to, as part of request signing. If you sign in via IAM Identity Center (AWS SSO), the resulting short-lived credentials are handled the same way.</p>
+
+    <h2>Local folder access</h2>
+    <p>RocketBucket runs inside the Apple App Sandbox. It can only access local folders you explicitly select, via security-scoped bookmarks. It has no access to anything else on your Mac.</p>
+
+    <h2>Network connections</h2>
+    <p>The app connects only to the storage endpoints you configure. It does not phone home, check licenses against a server, or fetch remote configuration.</p>
+
+    <h2>Changes</h2>
+    <p>If this policy ever changes, the updated version will be posted at this address with a new date above.</p>
+
+    <h2>Contact</h2>
+    <p>Questions? Email <a href="mailto:tautiu.dev@gmail.com">tautiu.dev@gmail.com</a>.</p>
+  </main>
+  <footer>
+    <a href="/">Home</a>·<a href="mailto:tautiu.dev@gmail.com">Support</a>
+    <span class="fineprint">© 2026 RocketBucket.</span>
+  </footer>
+</body>
+</html>
