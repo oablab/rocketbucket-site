@@ -39,11 +39,9 @@
   </nav>
 
   <header class="hero">
-    <h1>FTP の手ざわり、<br><em>S3</em> の世界</h1>
+    <h1 data-lines='["FTP の手ざわり、<br><em>S3</em> の世界", "30 年前から、<br>もう使い方を知っていた。", "ドラッグすれば、<br>アップロード。", "あなたのクラウドストレージに、<br>ひと目でわかるツールを。", "FTP から S3 へ——30 年後、<br>あの手ざわりが戻ってきた。"]'>FTP の手ざわり、<br><em>S3</em> の世界</h1>
     <p class="sub">Amazon S3、Cloudflare R2、Backblaze B2、MinIO のためのデュアルペイン・ファイル転送アプリ。<br class="desktop-br">S3 API を話すものなら何でも。ドラッグすればアップロード、引き出せばダウンロード。<br class="desktop-br">30 年前に身についた操作の習慣を、ひとつも変える必要はありません。</p>
 
-
-    <p class="taglines" data-lines='["30 年前から、もう使い方を知っていた。", "FTP の手ざわり、S3 の世界。", "ドラッグすれば、アップロード。", "あなたのクラウドストレージに、ひと目でわかるツールをようやく。", "FTP から S3 へ——30 年後、あの手ざわりが戻ってきた。"]'><span>30 年前から、もう使い方を知っていた。</span></p>
     <div class="cta-row">
       <span class="cta pending">まもなく Mac App Store に登場<small>リリース間近——お楽しみに</small></span>
       <a class="cta secondary" href="#story">ストーリーを読む</a>
@@ -195,25 +193,18 @@
 
   <script>
     (function () {
-      if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        var s = document.querySelector(".taglines span");
-        if (s) s.classList.add("show");
-        return;
-      }
-      var box = document.querySelector(".taglines");
-      if (!box) return;
-      var el = box.querySelector("span");
-      var lines = JSON.parse(box.dataset.lines);
+      var h = document.querySelector(".hero h1[data-lines]");
+      if (!h) return;
+      var lines = JSON.parse(h.dataset.lines);
       var i = 0;
-      el.classList.add("show");
       setInterval(function () {
-        el.classList.remove("show");
+        h.classList.add("fade");
         setTimeout(function () {
           i = (i + 1) % lines.length;
-          el.textContent = lines[i];
-          el.classList.add("show");
-        }, 620);
-      }, 4200);
+          h.innerHTML = lines[i];
+          h.classList.remove("fade");
+        }, 500);
+      }, 4600);
     })();
   </script>
 </body>
