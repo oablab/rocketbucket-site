@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Notes — RocketBucket</title>
+  <meta name="description" content="Development notes from building RocketBucket: what we learned moving very large files to S3 and R2.">
+  <meta property="og:title" content="RocketBucket Notes">
+  <meta property="og:description" content="Development notes from building RocketBucket.">
+  <meta property="og:image" content="https://rocketbucket.app/og-card.png">
+  <meta property="og:url" content="https://rocketbucket.app/notes/">
+  <link rel="icon" type="image/png" href="/icon.png">
+  <link rel="stylesheet" href="/site.css">
+  <style>
+    main { max-width: 680px; margin: 0 auto; padding: 2.5rem 1.5rem 4rem; }
+    main[hidden] { display: none; }
+    main h1 { font-family: "New York", Georgia, serif; font-size: 2rem; letter-spacing: -0.015em; margin-bottom: 0.4rem; }
+    html[lang="zh-Hant"] main h1, html[lang="ja"] main h1, html[lang="ko"] main h1 { font-family: inherit; font-weight: 800; letter-spacing: 0; }
+    main .intro { color: var(--muted); margin-bottom: 2rem; }
+    a.note { display: block; text-decoration: none; color: inherit; padding: 1.2rem 0; border-top: 1px solid var(--border); }
+    a.note:last-of-type { border-bottom: 1px solid var(--border); }
+    a.note .when { color: var(--muted); font-size: 0.85rem; }
+    a.note h2 { font-size: 1.2rem; margin: 0.2rem 0 0.3rem; letter-spacing: -0.01em; }
+    a.note:hover h2 { color: var(--orange-deep); }
+    a.note p { color: var(--muted); font-size: 0.95rem; margin: 0; }
+    .lang-switch { display: inline-flex; gap: 0.25rem; padding: 0.22rem; border-radius: 999px; background: var(--card); border: 1px solid var(--border); }
+    .lang-switch button { font: inherit; font-size: 0.85rem; font-weight: 600; color: var(--muted); background: none; border: 0; cursor: pointer; padding: 0.3rem 0.75rem; border-radius: 999px; }
+    .lang-switch button[aria-selected="true"] { background: var(--bg); color: var(--ink); box-shadow: 0 1px 3px rgba(34,38,46,0.14); }
+  </style>
+</head>
+<body>
+  <nav>
+    <a class="brand" href="/"><img src="/icon.png" alt="" width="28" height="28">RocketBucket</a>
+    <div class="lang-switch" role="tablist" aria-label="Language">
+      <button type="button" role="tab" data-lang-tab="en" aria-selected="true">EN</button>
+      <button type="button" role="tab" data-lang-tab="zh" aria-selected="false">中文</button>
+      <button type="button" role="tab" data-lang-tab="ja" aria-selected="false">日本語</button>
+      <button type="button" role="tab" data-lang-tab="ko" aria-selected="false">한국어</button>
+    </div>
+  </nav>
+
+  <main data-lang-page="en">
+    <h1>Notes</h1>
+    <p class="intro">What we learned building RocketBucket, written down while it was still fresh.</p>
+    <a class="note" href="/notes/500-gb-not-sure/?lang=en">
+      <div class="when">September 8, 2026</div>
+      <h2>500 GB went up. The app said it wasn't sure.</h2>
+      <p>Resumable multipart uploads to S3 and R2 at 500 GB: a 14.5 GB memory blow-up, an O(n²) journal, and a server that needed thirty seconds to glue 9,847 pieces together.</p>
+    </a>
+  </main>
+
+  <main data-lang-page="zh" hidden>
+    <h1>開發筆記</h1>
+    <p class="intro">做 RocketBucket 的過程中學到的事，趁還記得的時候寫下來。</p>
+    <a class="note" href="/notes/500-gb-not-sure/?lang=zh">
+      <div class="when">2026 年 9 月 8 日</div>
+      <h2>500 GB 傳完了，App 卻說它不確定</h2>
+      <p>500 GB 到 S3 與 R2 的斷點續傳：一次 14.5 GB 的記憶體暴增、一個 O(n²) 的 journal、還有一台需要三十秒把 9,847 片黏起來的 server。</p>
+    </a>
+  </main>
+
+  <main data-lang-page="ja" hidden>
+    <h1>開発ノート</h1>
+    <p class="intro">RocketBucket を作りながら学んだことを、まだ新しいうちに書き留めたもの。</p>
+    <a class="note" href="/notes/500-gb-not-sure/?lang=ja">
+      <div class="when">2026 年 9 月 8 日</div>
+      <h2>500 GB は上がった。アプリは「確信がない」と言った</h2>
+      <p>500 GB の S3 / R2 への再開可能アップロード：14.5 GB のメモリ膨張、O(n²) のジャーナル、そして 9,847 片を貼り合わせるのに 30 秒を要したサーバー。</p>
+    </a>
+  </main>
+
+  <main data-lang-page="ko" hidden>
+    <h1>개발 노트</h1>
+    <p class="intro">RocketBucket을 만들며 배운 것들을, 아직 생생할 때 적어 둔 기록.</p>
+    <a class="note" href="/notes/500-gb-not-sure/?lang=ko">
+      <div class="when">2026년 9월 8일</div>
+      <h2>500 GB는 올라갔다. 앱은 확신이 없다고 했다</h2>
+      <p>500 GB를 S3와 R2로 이어올리기: 14.5 GB 메모리 폭증, O(n²) 저널, 그리고 9,847조각을 붙이는 데 30초가 필요했던 서버.</p>
+    </a>
+  </main>
+
+  <footer>
+    © 2026 RocketBucket · <a href="/">rocketbucket.app</a> · <a href="/privacy/">Privacy</a> · <a href="mailto:tautiu.dev@gmail.com">Support</a>
+  </footer>
+
+  <script>
+    (function () {
+      var LANGS = ["en", "zh", "ja", "ko"];
+      var HTML_LANG = { en: "en", zh: "zh-Hant", ja: "ja", ko: "ko" };
+      var TITLES = { en: "Notes — RocketBucket", zh: "開發筆記 — RocketBucket", ja: "開発ノート — RocketBucket", ko: "개발 노트 — RocketBucket" };
+      function setLang(lang, remember) {
+        if (LANGS.indexOf(lang) === -1) lang = "en";
+        document.documentElement.lang = HTML_LANG[lang];
+        document.title = TITLES[lang];
+        document.querySelectorAll("[data-lang-page]").forEach(function (p) { p.hidden = p.getAttribute("data-lang-page") !== lang; });
+        document.querySelectorAll("[data-lang-tab]").forEach(function (t) { t.setAttribute("aria-selected", String(t.getAttribute("data-lang-tab") === lang)); });
+        if (remember) { try { localStorage.setItem("rocketbucket-note-lang", lang); } catch (e) {} }
+      }
+      document.querySelectorAll("[data-lang-tab]").forEach(function (t) {
+        t.addEventListener("click", function () { setLang(t.getAttribute("data-lang-tab"), true); });
+      });
+      var initial = null;
+      var param = new URLSearchParams(location.search).get("lang");
+      if (param && LANGS.indexOf(param) !== -1) initial = param;
+      if (!initial) { try { initial = localStorage.getItem("rocketbucket-note-lang"); } catch (e) {} }
+      if (!initial) {
+        var sitePath = null;
+        try { sitePath = localStorage.getItem("rocketbucket-lang"); } catch (e) {}
+        if (sitePath === "/zh/") initial = "zh"; else if (sitePath === "/ja/") initial = "ja"; else if (sitePath === "/ko/") initial = "ko"; else if (sitePath === "/") initial = "en";
+      }
+      if (!initial) {
+        var langs = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || ""];
+        for (var i = 0; i < langs.length && !initial; i++) {
+          if (/^zh/i.test(langs[i])) initial = "zh"; else if (/^ja/i.test(langs[i])) initial = "ja"; else if (/^ko/i.test(langs[i])) initial = "ko"; else if (/^en/i.test(langs[i])) initial = "en";
+        }
+      }
+      setLang(initial || "en", false);
+    })();
+  </script>
+</body>
+</html>
