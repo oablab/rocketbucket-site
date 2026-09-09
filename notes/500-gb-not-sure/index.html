@@ -110,6 +110,15 @@
       font-size: 1.02rem;
     }
     .callout strong { color: var(--orange-deep); }
+    .tldr {
+      background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--orange);
+      border-radius: 14px; padding: 1.1rem 1.4rem 1.2rem; margin-top: 1.8rem; font-size: 0.98rem;
+    }
+    .tldr .label { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--orange-deep); }
+    .tldr ul { margin-top: 0.6rem; padding-left: 1.1rem; }
+    .tldr li { margin-bottom: 0.5rem; }
+    .tldr li:last-child { margin-bottom: 0; }
+    .tldr b { color: var(--ink); font-weight: 700; }
     .outro { color: var(--muted); font-size: 0.95rem; }
     .outro a { color: var(--orange-deep); }
     footer {
@@ -136,6 +145,15 @@
     <a class="back" href="/notes/">← Notes</a>
     <h1>500 GB to R2: what happens when a huge upload stops, and when it starts again</h1>
     <p class="byline">September 8, 2026 · Multipart uploads and resume in RocketBucket</p>
+    <div class="tldr">
+      <div class="label">TL;DR</div>
+      <ul>
+        <li><b>Huge files:</b> uploaded as S3 multipart, streamed, never loaded into memory. For 500 GB that is 9,847 parts of 52 MiB, five in flight at a time. Tested end to end against Cloudflare R2.</li>
+        <li><b>Interrupted:</b> nothing is lost. The parts already on the server stay there, and a journal on disk records each one. Resume — even after quitting the app — verifies it is the same file, adopts those parts without re-reading them, and uploads only what is missing.</li>
+        <li><b>Orphaned parts:</b> incomplete uploads are shown in the bucket and you can delete them; they are billed until you do. RocketBucket never aborts one automatically, because it may belong to another client.</li>
+        <li><b>Memory:</b> about 900 MB to 1 GB at peak for the entire 500 GB run, including the resume. Under 500 MB when every part is already on the server.</li>
+      </ul>
+    </div>
 
     <p class="lede">We uploaded a 500 GB file to Cloudflare R2 with RocketBucket, stopped it partway, and started it again. It finished — 536,870,912,000 bytes, 9,847 parts. We watched memory for the whole run, from the first part to the assembled object, and it never went above about 900 MB to 1 GB. This is what happens underneath, and what we had to fix before that sentence was true.</p>
 
@@ -174,6 +192,15 @@
     <a class="back" href="/notes/">← 開發筆記</a>
     <h1>500 GB 傳上 R2：大檔案中斷時發生什麼事，再接著傳時又發生什麼事</h1>
     <p class="byline">2026 年 9 月 8 日 · RocketBucket 的分段上傳與續傳</p>
+    <div class="tldr">
+      <div class="label">TL;DR</div>
+      <ul>
+        <li><b>超大檔案：</b>用 S3 分段上傳、串流讀取，從不整個載入記憶體。500 GB 就是 9,847 段、每段 52 MiB、同時傳五段。已對 Cloudflare R2 完整實測。</li>
+        <li><b>中斷了：</b>什麼都不會丟。已上傳的分段留在 server 上，磁碟上的 journal 逐段記錄。續傳——就算已經關掉 App——會先確認是同一個檔案，直接採用那些分段而不重讀，只補缺少的。</li>
+        <li><b>孤兒 chunks：</b>未完成的上傳會顯示在 bucket 裡讓你刪除；刪之前是持續計費的。RocketBucket 絕不自動 abort，因為那可能是別的 client 的。</li>
+        <li><b>記憶體：</b>整趟 500 GB（含續傳）峰值約 900 MB 到 1 GB。所有分段都已在 server 上時低於 500 MB。</li>
+      </ul>
+    </div>
 
     <p class="lede">我們用 RocketBucket 把一個 500 GB 的檔案傳上 Cloudflare R2，中途停下，再接著傳。它完成了——536,870,912,000 個位元組，9,847 個分段。整趟我們一直盯著記憶體，從第一段到物件組裝完成，最高沒有超過大約 900 MB 到 1 GB。這篇講的是底下發生的事，以及在這句話成立之前我們得先修掉什麼。</p>
 
@@ -212,6 +239,15 @@
     <a class="back" href="/notes/">← 開発ノート</a>
     <h1>500 GB を R2 へ：巨大なアップロードが止まったとき、そしてまた始めたときに起きること</h1>
     <p class="byline">2026 年 9 月 8 日 · RocketBucket のマルチパートアップロードと再開</p>
+    <div class="tldr">
+      <div class="label">TL;DR</div>
+      <ul>
+        <li><b>巨大ファイル：</b>S3 マルチパートでストリーミングアップロード。メモリに丸ごと載せることはありません。500 GB なら 52 MiB × 9,847 パート、同時 5 パート。Cloudflare R2 で最後まで実測済み。</li>
+        <li><b>中断したら：</b>何も失われません。送信済みパートはサーバーに残り、ディスク上のジャーナルが一つずつ記録します。再開は——アプリを終了した後でも——同じファイルであることを確認し、それらのパートを読み直さずに引き継ぎ、欠けている分だけを送ります。</li>
+        <li><b>孤児パート：</b>未完了アップロードはバケット内に表示され、削除できます。削除するまで課金されます。RocketBucket が自動で中止することはありません。別のクライアントのものかもしれないからです。</li>
+        <li><b>メモリ：</b>再開を含む 500 GB の全行程でピーク約 900 MB〜1 GB。全パートがすでにサーバーにあれば 500 MB 未満。</li>
+      </ul>
+    </div>
 
     <p class="lede">RocketBucket で 500 GB のファイルを Cloudflare R2 にアップロードし、途中で止め、もう一度始めました。完了しました——536,870,912,000 バイト、9,847 パート。最初のパートから組み立てられたオブジェクトまで、実行中ずっとメモリを見ていましたが、およそ 900 MB から 1 GB を超えることはありませんでした。その下で何が起きているのか、そしてこの文が真になる前に何を直さなければならなかったのか、という話です。</p>
 
@@ -250,6 +286,15 @@
     <a class="back" href="/notes/">← 개발 노트</a>
     <h1>500 GB를 R2로: 거대한 업로드가 멈출 때, 그리고 다시 시작할 때 일어나는 일</h1>
     <p class="byline">2026년 9월 8일 · RocketBucket의 멀티파트 업로드와 이어올리기</p>
+    <div class="tldr">
+      <div class="label">TL;DR</div>
+      <ul>
+        <li><b>초대용량 파일:</b> S3 멀티파트로 스트리밍 업로드하며, 메모리에 통째로 올리지 않습니다. 500 GB라면 52 MiB × 9,847개 파트, 동시 5개. Cloudflare R2에서 끝까지 실측했습니다.</li>
+        <li><b>중단되면:</b> 아무것도 잃지 않습니다. 이미 올라간 파트는 서버에 남고, 디스크의 저널이 하나씩 기록합니다. 이어올리기는 — 앱을 종료한 뒤에도 — 같은 파일인지 확인하고, 그 파트들을 다시 읽지 않고 이어받아 빠진 것만 올립니다.</li>
+        <li><b>고아 파트:</b> 미완료 업로드는 버킷에 표시되고 삭제할 수 있습니다. 삭제하기 전까지 과금됩니다. RocketBucket은 절대 자동으로 중단하지 않습니다. 다른 클라이언트의 것일 수 있으니까요.</li>
+        <li><b>메모리:</b> 이어올리기를 포함한 500 GB 전체 실행에서 최대 약 900 MB~1 GB. 모든 파트가 이미 서버에 있으면 500 MB 미만.</li>
+      </ul>
+    </div>
 
     <p class="lede">RocketBucket으로 500 GB 파일을 Cloudflare R2에 올리다가 중간에 멈추고, 다시 시작했습니다. 끝났습니다 — 536,870,912,000바이트, 9,847개 파트. 첫 파트부터 조립이 끝난 오브젝트까지 실행 내내 메모리를 지켜봤는데, 약 900 MB에서 1 GB를 넘은 적이 없습니다. 그 아래에서 무슨 일이 일어나는지, 그리고 이 문장이 참이 되기 전에 무엇을 고쳐야 했는지에 대한 이야기입니다.</p>
 
