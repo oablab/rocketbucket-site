@@ -113,6 +113,13 @@ nav .lang a.active { color: var(--ink); font-weight: 700; }
   font-size: 0.82rem; color: var(--pane-ink);
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
 }
+/* Real product screenshot in the hero (replaces the CSS mockup). Same frame
+   treatment: rounded corners, shadow, sits above the orange glow. */
+.hero-shot {
+  position: relative; z-index: 1; display: block; width: 100%; height: auto;
+  border-radius: 14px; box-shadow: var(--shadow);
+  border: 1px solid rgba(255,255,255,0.08);
+}
 .mockup .titlebar {
   display: flex; align-items: center; gap: 0.5rem;
   padding: 0.6rem 0.9rem; background: rgba(255,255,255,0.04);
