@@ -11,16 +11,16 @@ W, H = 1200, 630
 TEXT_MAX_X = 824   # artwork starts at 830
 
 TITLES = {
-    "en": ["500 GB went up.", "The app said it wasn't sure."],
-    "zh": ["500 GB 傳完了，", "App 卻說它不確定"],
-    "ja": ["500 GB は上がった。", "アプリは「確信がない」と言った"],
-    "ko": ["500 GB는 올라갔다.", "앱은 확신이 없다고 했다"],
+    "en": ["500 GB to R2, stopped,", "and started again."],
+    "zh": ["500 GB 傳上 R2，", "中斷，再接著傳"],
+    "ja": ["500 GB を R2 へ、止めて、", "また続ける"],
+    "ko": ["500 GB를 R2로, 멈추고,", "다시 이어가기"],
 }
 SUBS = {
-    "en": "Resumable uploads to S3 & R2, at 9,847 parts",
-    "zh": "S3 與 R2 的斷點續傳，9,847 個分段",
-    "ja": "S3 と R2 への再開可能アップロード、9,847 パート",
-    "ko": "S3와 R2로의 이어올리기, 9,847개 파트",
+    "en": "Multipart upload & resume · peak memory ~900 MB–1 GB",
+    "zh": "分段上傳與續傳 · 記憶體峰值約 900 MB–1 GB",
+    "ja": "マルチパート再開 · ピークメモリ約 900 MB–1 GB",
+    "ko": "멀티파트 이어올리기 · 최대 메모리 약 900 MB–1 GB",
 }
 FONTS = {  # (path, bold index, regular index)
     "en": ("/System/Library/Fonts/HelveticaNeue.ttc", 1, 0),

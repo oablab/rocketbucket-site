@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>500 GB went up. The app said it wasn't sure. — RocketBucket Notes</title>
-  <meta name="description" content="How RocketBucket resumes interrupted multipart uploads to S3 and R2 — and the three ways a 500 GB, 9,847-part upload failed after the design had already been reviewed five times.">
-  <meta property="og:title" content="500 GB went up. The app said it wasn't sure.">
-  <meta property="og:description" content="Resumable multipart uploads to S3/R2 at 500 GB: a 14.5 GB memory blow-up, an O(n²) journal, and a server that needed thirty seconds to glue 9,847 pieces together.">
+  <title>500 GB to R2: what happens when a huge upload stops, and when it starts again — RocketBucket Notes</title>
+  <meta name="description" content="How RocketBucket uploads a 500 GB file to S3 or R2 in 9,847 parts, what it keeps when the upload stops, how it resumes without re-reading what is already on the server, and how it proves the object is complete. Peak memory for the whole run: about 900 MB to 1 GB.">
+  <meta property="og:title" content="500 GB to R2: what happens when a huge upload stops, and when it starts again">
+  <meta property="og:description" content="Multipart upload and resume in RocketBucket: 9,847 parts, a journal that outlives the app, zero re-reads on resume, and a completion proof that waits for R2 to assemble. Peak memory ~900 MB–1 GB.">
   <meta property="og:type" content="article">
   <meta property="og:image" content="https://rocketbucket.app/notes/500-gb-not-sure/og-en.png">
   <meta property="og:image:width" content="1200">
@@ -16,8 +16,8 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta property="og:site_name" content="RocketBucket">
   <meta property="og:locale" content="en_US">
-  <meta name="twitter:title" content="500 GB went up. The app said it wasn't sure.">
-  <meta name="twitter:description" content="We put a 500 GB file through RocketBucket to Cloudflare R2. The resume design had been reviewed five times. The run failed three times anyway.">
+  <meta name="twitter:title" content="500 GB to R2: what happens when a huge upload stops, and when it starts again">
+  <meta name="twitter:description" content="We uploaded 500 GB to Cloudflare R2, stopped it, and resumed it. It finished — 9,847 parts, peak memory about 900 MB to 1 GB. Here is what happens underneath.">
   <link rel="canonical" href="https://rocketbucket.app/notes/500-gb-not-sure/">
   <link rel="icon" type="image/png" href="/icon.png">
   <link rel="apple-touch-icon" href="/icon.png">
@@ -134,140 +134,152 @@
   <!-- ============================== EN ============================== -->
   <main data-lang-page="en">
     <a class="back" href="/notes/">← Notes</a>
-    <h1>500 GB went up. The app said it wasn't sure.</h1>
-    <p class="byline">September 8, 2026 · Resumable uploads to S3 and R2</p>
+    <h1>500 GB to R2: what happens when a huge upload stops, and when it starts again</h1>
+    <p class="byline">September 8, 2026 · Multipart uploads and resume in RocketBucket</p>
 
-    <p class="lede">We put a 500 GB file through RocketBucket to Cloudflare R2 — 9,847 parts. The design for resuming an interrupted upload had been through five rounds of review and was, as far as anyone could tell, correct. The run failed three times anyway, and not one of the failures was in the design.</p>
+    <p class="lede">We uploaded a 500 GB file to Cloudflare R2 with RocketBucket, stopped it partway, and started it again. It finished — 536,870,912,000 bytes, 9,847 parts. We watched memory for the whole run, from the first part to the assembled object, and it never went above about 900 MB to 1 GB. This is what happens underneath, and what we had to fix before that sentence was true.</p>
 
-    <h2>What "resume" has to promise</h2>
-    <p>S3 and everything that speaks its API upload big files in parts: at most 10,000 of them, each between 5 MiB and 5 GiB. For 500 GB that arithmetic forces a part of at least 52 MB, so RocketBucket ignores its usual 8 MiB default and picks 52 MiB for this file before the upload starts. Five parts are in flight at once — about 260 MB of memory, which is the whole budget a transfer is supposed to need.</p>
-    <p>If the connection drops at part 6,000, "resume" means keeping the same upload ID and not sending those 6,000 parts again. The danger is obvious once you say it out loud: what if the file changed in between? You would glue the first half of the old file to the second half of the new one and the server would happily call it an object. So every part is recorded the first time it is fully read — number, byte count, SHA-256 — and a part is skipped only when it is both on the server and matches that record. Across sessions the records live in a small journal on disk, written only after a part actually succeeded and deleted only after the completion is proven. We keep our own SHA-256 rather than trusting the server's ETag, because under SSE-KMS the ETag is not the part's MD5 and there is nothing to compare against.</p>
-    <p>One more rule, learned from watching other tools: incomplete multipart uploads are invisible in a normal listing and they are billed until someone aborts them. RocketBucket shows them, but never aborts one it did not create. Another client may own it.</p>
+    <h2>What 500 GB looks like to S3</h2>
+    <p>S3, and everything that speaks its API, will not take a big file in one request. It takes parts: at most 10,000 of them, each between 5 MiB and 5 GiB, and then one final call that glues them into an object. RocketBucket's default part is 8 MiB, but 500 GB divided by 8 MiB is 64,000 parts, so before the upload starts it does the arithmetic the other way: 500 GB ÷ 10,000, rounded up to a whole mebibyte, is 52 MiB. That decision is permanent. A part size cannot change once the first part is on the server, and a resume must cut the file in exactly the same places or nothing lines up.</p>
+    <p>Five parts are in flight at once. The file is streamed, never loaded, so the memory a transfer needs is roughly five parts plus one buffer — about 300 MB — and the network library's own copies on top of that. The 900 MB to 1 GB we measured is that envelope.</p>
+    <p>Two things are written as the upload runs, and both exist only for the moment it stops. The object is stamped at creation with a random commit token in its metadata. And a small journal on disk gets one line per part — its number, its size, and our own SHA-256 of its bytes — written only <em>after</em> the server has accepted that part. We hash it ourselves instead of trusting the server's ETag because under SSE-KMS the ETag is not the part's MD5, and there would be nothing to compare against later.</p>
 
-    <h2>14.5 GB of memory to skip 9,800 parts</h2>
-    <p>We interrupted the 500 GB upload and resumed it. Memory climbed to 14.5 GB and macOS killed the process. A fresh upload of the same file sits at 700–900 MB.</p>
-    <p>The first suspect was the journal. It rewrote the whole file on every part — at 10,000 parts that is 10,000 rewrites of a JSON document that grows each time, quadratic work on the disk. We batched it to every 64 parts, made a failed write stay pending instead of silently vanishing, and reran. Memory climbed to 14.5 GB and macOS killed the process. The fix was correct and it was not the fix.</p>
-    <p>The real cause was in how "skip" was implemented. To verify a part before skipping it, the resume pass read the file from byte zero and hashed every part — including the 9,800 already on the server — in one tight loop that never paused. Each part left behind a little cloud of temporaries, and one of them was embarrassing: the hex encoding used <code>String(format:)</code>, which allocates an Objective-C string per byte. Roughly 127,000 small allocations that nothing ever drained.</p>
-    <p>The structural fix: when the journal exists and the source is a local file, read only the parts that are missing, by byte range, and never touch the ones already uploaded. Their content is vouched for by the file's identity — size, modification date, and the inode, so a same-size replacement is caught — plus the journal's hash. A resume where every part is already there now reads zero bytes from disk and issues zero uploads; there is a test that asserts exactly that at 10,000 parts. The real 500 GB resume that used to die now stays under 500 MB when nothing is missing, and around 700 MB to 1 GB while it fills the gaps.</p>
+    <h2>What happens when it stops</h2>
+    <p>An upload stops for two reasons: the connection drops, or you press Stop. The second one has a confession attached. Until this week, pressing Stop during a single large file did nothing. The cancel flag was checked between files, and a 9,847-part file is one file. It is fixed — cancellation now reaches into the part uploads and takes effect within the parts already in flight — and it was found the way most of this was found, by running a real 10 GB resume and pressing the button.</p>
+    <p>Either way, the same rule applies: keep everything. The journal is flushed to disk, and the multipart upload on the server is <strong>not</strong> aborted. The 6,000 parts that made it stay there, under their upload ID, waiting. They are billed while they wait — every S3-compatible store charges for parts of an unfinished upload, and they are invisible in a normal listing — so RocketBucket shows the bucket's incomplete uploads and lets you delete them. But it never aborts one on its own. It may not be the one that created it; another client may own it.</p>
 
-    <h2>Review found what the fast path skipped</h2>
-    <p>The ranged fast path went to review and came back with two must-fixes. It did not check that a range read returned every byte it asked for — a short read of the final part would have completed a truncated object, and the server would have accepted it. And it called <code>CompleteMultipartUpload</code> directly, skipping the reconciliation logic the slow path had. Both are fixed; a short read now fails the upload and keeps the journal for the next attempt.</p>
+    <h2>What happens when you start again</h2>
+    <p>You drag the same file to the same place. Before RocketBucket reads a single byte of it, it lists the incomplete uploads for that key on the server and matches them against the journal. No hashing, no disk reads — it is cheap enough to do before asking you anything. Then it asks: resume this one, start over (aborting only the upload you chose), or cancel.</p>
+    <p>Choose resume, and the first check is whether this is still the same file. Same size, same modification date, and the same inode — so a file that was replaced by a different one of exactly the same size fails here, and the journal is not trusted. Then the server's part list has to agree with the journal: every part we recorded must be there, with the ETag and size we recorded. Only then are those parts adopted.</p>
+    <p>Adopted parts are never read again. RocketBucket seeks past them and reads only the missing parts, by byte range, hashes each one into the journal, and uploads it. A resume where every part is already on the server reads zero bytes from disk and sends zero uploads; there is a test that asserts exactly that with 10,000 parts.</p>
+    <p>That is not how the first version worked, and the first version is how we learned what 500 GB means. It verified each part before skipping it by reading the whole file from byte zero and hashing every part, including the 9,800 already uploaded, in one loop that never paused. Memory climbed to 14.5 GB and macOS killed it. We suspected the journal first — it rewrote the whole file on every part, ten thousand rewrites of a document that grows each time — and batched it to every 64 parts. That was a real bug and a correct fix, and the resume still died at 14.5 GB. The actual cause was in the hashing loop: the hex encoding used <code>String(format:)</code>, which allocates an Objective-C string per byte, and nothing ever drained the roughly 127,000 temporaries it left behind. Reading only the missing parts made the question moot.</p>
 
-    <h2>It finished, and said it wasn't sure</h2>
-    <p>Then the whole thing went through. All 500 GB. And the log said: <em>upload completion is uncertain, please verify the object manually.</em></p>
-    <p>We checked R2. The object was there: 536,870,912,000 bytes, 9,847 parts, our commit marker in its metadata, no leftover multipart upload. A complete success reported as a failure.</p>
-    <p>When RocketBucket sends the final Complete request it stamps the object with a random token, so that if the response is lost it can ask the server afterwards "is the object there, with my token, at my size?" and know the answer is about its own upload and not someone else's same-size file. That question has a timing problem at this scale. R2 acknowledges the Complete and then spends tens of seconds assembling 9,847 pieces into one object. During that window the object does not exist yet and the multipart upload is already gone. Our check saw "upload gone, object absent," tried three times with at most four seconds between them, and concluded it could not know.</p>
-    <p>It now waits the way a large completion deserves — six attempts, 2, 4, 8, 15, 15, 15 seconds — and treats "the upload is gone" as ambiguous rather than as failure. What counts as success did not change: the object must answer, carry our token, and be exactly the expected size. If the token or size is wrong we still say we are not sure. We would rather admit uncertainty than claim an object that is not ours.</p>
+    <h2>How it finishes</h2>
+    <p>When the last part is up, RocketBucket checks that parts 1 through 9,847 are all present and that their sizes add up to the file, and sends the Complete request. For a small file that is the end. For 500 GB on R2 it is the beginning of a strange half-minute: the server acknowledges the request, and then spends tens of seconds assembling 9,847 pieces into one object. During that window the object does not exist yet, and the multipart upload is already gone.</p>
+    <p>We know this because our first 500 GB completion reported <em>upload completion is uncertain, please verify the object manually</em> — and the object was there, complete, with our token on it. The reconciliation that runs when a Complete is ambiguous had asked "is the object there, with my token, at my size?" three times, four seconds apart, seen "upload gone, object absent" each time, and given up. It now asks six times — 2, 4, 8, 15, 15, 15 seconds — and treats a vanished upload as a question, not an answer. The definition of success did not move: the object must answer, carry our token, and be exactly the expected size. If the token or size is wrong we still say we are not sure, because the alternative is claiming an object that might be somebody else's.</p>
+    <p>Review found two more things in the resume path before it shipped: a range read was not checked for returning every byte it asked for, which could have completed a truncated object the server would happily accept; and the fast path called Complete directly, skipping the reconciliation above. Both fixed.</p>
+
+    <h2>The run</h2>
+    <p>Start the 500 GB upload. Stop it. Quit. Open RocketBucket, drag the file again, choose resume. It adopts the parts on the server, uploads the rest, completes, waits out the assembly, and confirms the object: 536,870,912,000 bytes, 9,847 parts, commit token present, no leftover multipart upload. Peak memory across the entire run, about 900 MB to 1 GB.</p>
 
     <hr>
-    <p>The design document had a section for every one of these situations, and every section was right. The failures were in the three things a design document does not contain: an allocator, a file that grows, and a server that needs half a minute to glue nine thousand pieces together. You do not find those by reviewing. You find them by uploading 500 GB.</p>
+    <p>The design for all of this had been reviewed five times and was right. What broke was in none of it: an allocator, a journal that grew, a Stop button checked in the wrong loop, and a server that needs half a minute to glue nine thousand pieces together. You do not find those by reviewing. You find them by uploading 500 GB, stopping it, and starting again.</p>
 
-    <div class="callout"><strong>Where this stands.</strong> Same-session and cross-session resume are in the current build, for local files uploading to S3-compatible storage. A cloud-to-cloud resume (S3 → R2, say) still re-reads the source, because it has no byte-range reader yet; a ranged GET is the next piece of work.</div>
+    <div class="callout"><strong>Where this stands.</strong> Same-session and cross-session resume are in the current build for local files uploading to S3-compatible storage. A cloud-to-cloud resume (S3 → R2, say) still re-reads the source, because there is no byte-range reader for a cloud source yet; a ranged GET is the next piece of work.</div>
     <p class="outro">RocketBucket is a dual-pane file transfer app for S3, R2, B2 and MinIO, coming to the Mac App Store. <a href="https://rocketbucket.app/">rocketbucket.app</a></p>
   </main>
 
   <!-- ============================== ZH ============================== -->
   <main data-lang-page="zh" hidden>
     <a class="back" href="/notes/">← 開發筆記</a>
-    <h1>500 GB 傳完了，App 卻說它不確定</h1>
-    <p class="byline">2026 年 9 月 8 日 · S3 與 R2 的斷點續傳</p>
+    <h1>500 GB 傳上 R2：大檔案中斷時發生什麼事，再接著傳時又發生什麼事</h1>
+    <p class="byline">2026 年 9 月 8 日 · RocketBucket 的分段上傳與續傳</p>
 
-    <p class="lede">我們用 RocketBucket 把一個 500 GB 的檔案送上 Cloudflare R2——9,847 個分段。斷點續傳的設計經過五輪 review，就所有人看得出來的部分而言，它是對的。這一趟還是失敗了三次，而三次都不在設計裡。</p>
+    <p class="lede">我們用 RocketBucket 把一個 500 GB 的檔案傳上 Cloudflare R2，中途停下，再接著傳。它完成了——536,870,912,000 個位元組，9,847 個分段。整趟我們一直盯著記憶體，從第一段到物件組裝完成，最高沒有超過大約 900 MB 到 1 GB。這篇講的是底下發生的事，以及在這句話成立之前我們得先修掉什麼。</p>
 
-    <h2>「續傳」要承諾什麼</h2>
-    <p>S3 和所有說 S3 協議的服務，大檔案都是分段上傳：最多 10,000 段，每段介於 5 MiB 到 5 GiB。500 GB 算下來，每段至少要 52 MB，所以 RocketBucket 會放棄平常 8 MiB 的預設，在上傳開始前就替這個檔案選定 52 MiB。同時有五段在傳——大約 260 MB 的記憶體，這應該就是一次傳輸需要的全部預算。</p>
-    <p>如果連線在第 6,000 段斷掉，「續傳」的意思是：沿用同一個 upload ID，那 6,000 段不要重送。危險之處說出來就很明顯：萬一中間檔案被改過呢？你會把舊檔的前半黏上新檔的後半，而 server 會很樂意把它當成一個物件。所以每一段在第一次完整讀到時就會被記錄下來——編號、位元組數、SHA-256——一段只有在「server 上有」而且「跟記錄相符」兩個條件都成立時才會被跳過。跨 session 的話，這些記錄住在磁碟上一個小小的 journal 裡，一段真正傳成功之後才寫入，完成被證明之後才刪除。我們自己算 SHA-256，不信任 server 的 ETag，因為在 SSE-KMS 之下 ETag 不是該段的 MD5，根本沒東西可以比。</p>
-    <p>還有一條規則，是看別的工具學到的：未完成的分段上傳在一般列表裡看不見，而且在有人 abort 之前會一直計費。RocketBucket 會把它們顯示出來，但絕不 abort 一個不是自己建立的。那可能是別的 client 的。</p>
+    <h2>對 S3 來說，500 GB 長什麼樣</h2>
+    <p>S3 和所有說 S3 協議的服務，都不會用一個請求收下一個大檔案。它收的是分段：最多 10,000 段，每段介於 5 MiB 到 5 GiB，最後再用一個呼叫把它們黏成一個物件。RocketBucket 預設一段 8 MiB，但 500 GB 除以 8 MiB 是 64,000 段，所以上傳開始前它反過來算：500 GB ÷ 10,000，進位到整數 MiB，是 52 MiB。這個決定是永久的。第一段上了 server 之後分段大小就不能改，續傳時必須在一模一樣的位置切開檔案，否則什麼都對不上。</p>
+    <p>同時有五段在傳。檔案是串流讀取、不是整個載入，所以一次傳輸需要的記憶體大約是五段加一個緩衝——約 300 MB——再加上網路程式庫自己的複本。我們量到的 900 MB 到 1 GB 就是這個範圍。</p>
+    <p>上傳進行中會寫兩樣東西，兩樣都只為了中斷那一刻而存在。物件在建立時就被蓋上一個隨機的 commit token，放在 metadata 裡。磁碟上一個小小的 journal 則每段記一行——編號、大小、以及我們自己算的這段位元組的 SHA-256——而且只在 server <em>接受</em>那一段之後才寫。我們自己算 hash 而不信 server 的 ETag，是因為在 SSE-KMS 之下 ETag 不是該段的 MD5，之後會沒東西可比。</p>
 
-    <h2>跳過 9,800 段，用了 14.5 GB 記憶體</h2>
-    <p>我們把 500 GB 的上傳中斷，再續傳。記憶體爬到 14.5 GB，macOS 把 process 殺了。同一個檔案從頭傳，只用 700 到 900 MB。</p>
-    <p>第一個嫌犯是 journal。它每傳一段就把整個檔案重寫一遍——10,000 段就是重寫 10,000 次一份越寫越大的 JSON，磁碟上的平方級工作量。我們改成每 64 段批次寫一次，讓寫入失敗時保持待處理而不是默默消失，然後重跑。記憶體爬到 14.5 GB，macOS 把 process 殺了。這個修正是對的，而它不是那個修正。</p>
-    <p>真正的原因在「跳過」是怎麼實作的。為了在跳過之前驗證每一段，續傳那一趟從第 0 個位元組開始讀檔、把每一段都 hash 一遍——包括 server 上早就有的那 9,800 段——在一個從不暫停的緊迫迴圈裡。每一段都留下一小團暫存物件，其中一個很難為情：轉十六進位用的是 <code>String(format:)</code>，每個位元組配置一個 Objective-C 字串。大約 127,000 個小配置，沒有任何東西去回收它們。</p>
-    <p>結構性的修法：當 journal 存在、而且來源是本機檔案時，只依位元組範圍讀那些缺少的段，已經傳上去的一段都不碰。它們的內容由檔案的身分擔保——大小、修改時間、加上 inode，所以同樣大小的替換檔會被抓到——再加上 journal 裡的 hash。一次每段都已經在 server 上的續傳，現在從磁碟讀零個位元組、送出零次上傳；有一個測試在 10,000 段的規模上恰恰斷言這件事。原本會死掉的那個真實 500 GB 續傳，現在在沒有缺段時停在 500 MB 以下，補缺段時大約 700 MB 到 1 GB。</p>
+    <h2>中斷時發生什麼事</h2>
+    <p>上傳會停下有兩個原因：連線斷了，或你按了停止。第二個附帶一個自白。直到這週為止，在單一大檔案傳輸中按停止是沒有作用的。取消旗標只在檔案之間檢查，而一個 9,847 段的檔案是一個檔案。修好了——取消現在會進到分段上傳裡面，在正在傳的那幾段之內生效——而它被發現的方式跟這篇大部分的事一樣：實際跑一次 10 GB 的續傳，然後按那顆按鈕。</p>
+    <p>不管哪種原因，規則相同：全部保留。journal 寫回磁碟，server 上的分段上傳<strong>不</strong> abort。已經上去的 6,000 段留在那裡，掛在它們的 upload ID 底下等著。等待期間是要計費的——每個 S3 相容的儲存都會對未完成上傳的分段收費，而且它們在一般列表裡看不見——所以 RocketBucket 會顯示 bucket 裡未完成的上傳，讓你刪。但它絕不自己 abort 任何一個。那可能不是它建立的；可能屬於別的 client。</p>
 
-    <h2>Review 找到了快速路徑跳過的東西</h2>
-    <p>依範圍讀取的快速路徑送去 review，帶回兩個必修項。它沒有檢查一次範圍讀取是否真的回傳了要求的每一個位元組——最後一段若讀短了，會完成一個被截斷的物件，而 server 會接受。它還直接呼叫 <code>CompleteMultipartUpload</code>，繞過了慢速路徑有的核對邏輯。兩個都修了；讀短現在會讓上傳失敗，並保留 journal 給下一次嘗試。</p>
+    <h2>再接著傳時發生什麼事</h2>
+    <p>你把同一個檔案拖到同一個地方。在 RocketBucket 讀它任何一個位元組之前，它會先列出 server 上這個 key 的未完成上傳，跟 journal 比對。不算 hash、不讀磁碟——便宜到可以在問你任何事之前先做。然後它問你：續傳這一個、從頭來（只 abort 你選的那個上傳）、還是取消。</p>
+    <p>選了續傳，第一個檢查是這還是不是同一個檔案。同樣的大小、同樣的修改時間、同樣的 inode——所以一個被換成另一個大小完全相同的檔案會在這裡被擋下，journal 不會被採信。接著 server 的分段清單必須跟 journal 一致：我們記錄過的每一段都要在，ETag 和大小都要跟記錄相符。到這時那些分段才會被採用。</p>
+    <p>被採用的分段不會再讀一次。RocketBucket 跳過它們，只依位元組範圍讀缺少的那些段，每段算 hash 寫進 journal，然後上傳。一次每段都已經在 server 上的續傳，從磁碟讀零個位元組、送出零次上傳；有一個 10,000 段的測試就恰恰斷言這件事。</p>
+    <p>第一版不是這樣做的，而第一版就是我們學到 500 GB 是什麼意思的方式。它為了在跳過之前驗證每一段，從第 0 個位元組讀整個檔案、把每一段都算一遍 hash——包括已經上傳的 9,800 段——在一個從不暫停的迴圈裡。記憶體爬到 14.5 GB，macOS 把它殺了。我們先懷疑 journal——它每段都把整份檔案重寫一次，一份越寫越大的文件重寫一萬次——把它改成每 64 段批次寫。那是真的 bug、也是正確的修法，而續傳還是死在 14.5 GB。真正的原因在算 hash 的迴圈裡：十六進位轉換用了 <code>String(format:)</code>，每個位元組配置一個 Objective-C 字串，它留下的大約 127,000 個暫存物件沒有任何東西去回收。改成只讀缺少的分段之後，這個問題就不存在了。</p>
 
-    <h2>它完成了，然後說它不確定</h2>
-    <p>然後整個傳過去了。全部 500 GB。日誌上寫著：<em>上傳的完成狀態不確定，請手動確認物件。</em></p>
-    <p>我們去 R2 看。物件在：536,870,912,000 個位元組、9,847 段、metadata 裡有我們的 commit 標記、沒有殘留的分段上傳。一次完全的成功被回報成失敗。</p>
-    <p>RocketBucket 送出最後的 Complete 請求時，會在物件上蓋一個隨機的 token，這樣萬一回應丟了，事後可以問 server：「物件在嗎？帶著我的 token、是我的大小嗎？」並且確定答案講的是自己這次上傳，而不是別人同樣大小的檔案。這個問題在這種規模下有時間差。R2 回應了 Complete，然後花幾十秒把 9,847 片組裝成一個物件。在那段時間裡，物件還不存在，而分段上傳已經不見了。我們的檢查看到「上傳不見了、物件不在」，試了三次、每次最多間隔四秒，然後判定它無法得知。</p>
-    <p>現在它會用一個大型完成該有的耐心等——六次，2、4、8、15、15、15 秒——並且把「上傳不見了」當成模糊，而不是失敗。什麼算成功沒有改變：物件必須回應、帶著我們的 token、而且大小完全等於預期。token 或大小不對，我們仍然說不確定。我們寧可承認不確定，也不要認領一個不是我們的物件。</p>
+    <h2>它怎麼完成</h2>
+    <p>最後一段上去之後，RocketBucket 檢查第 1 到第 9,847 段全部在場、大小加起來等於檔案，然後送出 Complete 請求。小檔案到這裡就結束了。500 GB 在 R2 上，這是一段奇怪的半分鐘的開始：server 回應了請求，然後花幾十秒把 9,847 片組裝成一個物件。在那段時間裡，物件還不存在，而分段上傳已經不見了。</p>
+    <p>我們知道這件事，是因為第一次 500 GB 完成時回報了<em>上傳的完成狀態不確定，請手動確認物件</em>——而物件就在那裡，完整，上面有我們的 token。Complete 結果模糊時跑的核對邏輯問了「物件在嗎？帶著我的 token、是我的大小嗎？」三次、間隔四秒，每次都看到「上傳不見了、物件不在」，然後放棄。現在它問六次——2、4、8、15、15、15 秒——並且把消失的上傳當成一個問題，而不是一個答案。成功的定義沒有動：物件必須回應、帶著我們的 token、大小完全等於預期。token 或大小不對，我們仍然說不確定，因為另一個選項是認領一個可能屬於別人的物件。</p>
+    <p>Review 在續傳路徑出貨前還找到兩件事：範圍讀取沒有檢查是否真的回傳了要求的每個位元組，這可能會完成一個被截斷的物件、而 server 會欣然接受；還有快速路徑直接呼叫 Complete，繞過了上面的核對。兩個都修了。</p>
+
+    <h2>這一趟</h2>
+    <p>開始傳 500 GB。停下。關掉 App。打開 RocketBucket，再拖一次檔案，選續傳。它採用 server 上的分段，上傳剩下的，送出 Complete，等組裝完成，確認物件：536,870,912,000 個位元組、9,847 段、commit token 在、沒有殘留的分段上傳。整趟的記憶體峰值，大約 900 MB 到 1 GB。</p>
 
     <hr>
-    <p>設計文件裡每一種情況都有一節，每一節都是對的。失敗在設計文件不會有的三樣東西裡：一個配置器、一個會長大的檔案、一台需要半分鐘把九千片黏起來的 server。這些不是 review 能找到的。是把 500 GB 傳上去才找到的。</p>
+    <p>這一切的設計 review 了五輪，而且是對的。壞掉的地方全都不在設計裡：一個配置器、一份會長大的 journal、一顆在錯的迴圈裡檢查的停止按鈕、一台需要半分鐘把九千片黏起來的 server。這些不是 review 能找到的。是把 500 GB 傳上去、停下、再接著傳才找到的。</p>
 
-    <div class="callout"><strong>目前狀態。</strong>同一 session 與跨 session 的續傳都在現在的版本裡，適用於本機檔案上傳到 S3 相容儲存。雲到雲的續傳（比如 S3 → R2）目前仍會重新讀取來源，因為還沒有依範圍讀取的機制；帶 Range 的 GET 是下一項工作。</div>
+    <div class="callout"><strong>目前狀態。</strong>同一 session 與跨 session 的續傳都在現在的版本裡，適用於本機檔案上傳到 S3 相容儲存。雲到雲的續傳（比如 S3 → R2）目前仍會重新讀取來源，因為雲端來源還沒有依範圍讀取的機制；帶 Range 的 GET 是下一項工作。</div>
     <p class="outro">RocketBucket 是給 S3、R2、B2 與 MinIO 的雙欄檔案傳輸工具，即將上架 Mac App Store。<a href="https://rocketbucket.app/zh/">rocketbucket.app</a></p>
   </main>
 
   <!-- ============================== JA ============================== -->
   <main data-lang-page="ja" hidden>
     <a class="back" href="/notes/">← 開発ノート</a>
-    <h1>500 GB は上がった。アプリは「確信がない」と言った</h1>
-    <p class="byline">2026 年 9 月 8 日 · S3 と R2 への再開可能アップロード</p>
+    <h1>500 GB を R2 へ：巨大なアップロードが止まったとき、そしてまた始めたときに起きること</h1>
+    <p class="byline">2026 年 9 月 8 日 · RocketBucket のマルチパートアップロードと再開</p>
 
-    <p class="lede">500 GB のファイルを RocketBucket で Cloudflare R2 に送りました——9,847 パート。中断したアップロードを再開する設計は 5 回のレビューを経ていて、誰の目にも正しく見えました。それでもこの一回は 3 回失敗し、そのどれも設計の中にはありませんでした。</p>
+    <p class="lede">RocketBucket で 500 GB のファイルを Cloudflare R2 にアップロードし、途中で止め、もう一度始めました。完了しました——536,870,912,000 バイト、9,847 パート。最初のパートから組み立てられたオブジェクトまで、実行中ずっとメモリを見ていましたが、およそ 900 MB から 1 GB を超えることはありませんでした。その下で何が起きているのか、そしてこの文が真になる前に何を直さなければならなかったのか、という話です。</p>
 
-    <h2>「再開」が約束しなければならないこと</h2>
-    <p>S3 と、その API を話すすべてのサービスは、大きなファイルをパートに分けてアップロードします。最大 10,000 パート、各パートは 5 MiB から 5 GiB。500 GB だとこの算術がパートを最低 52 MB に強制するので、RocketBucket は普段の 8 MiB のデフォルトを捨て、アップロード開始前にこのファイルには 52 MiB を選びます。同時に 5 パートが飛んでいる——およそ 260 MB のメモリで、これが転送に必要な予算の全部のはずです。</p>
-    <p>6,000 パート目で接続が切れたとき、「再開」とは同じアップロード ID を使い続け、その 6,000 パートを送り直さないことです。口に出せば危険は明らかです。その間にファイルが変わっていたら？ 古いファイルの前半に新しいファイルの後半を貼り付け、サーバーは喜んでそれをオブジェクトと呼ぶでしょう。だからすべてのパートは、最初に完全に読まれた時点で記録されます——番号、バイト数、SHA-256。そしてパートがスキップされるのは、サーバー上に存在し、かつその記録と一致するときだけです。セッションをまたぐ場合、記録はディスク上の小さなジャーナルに置かれ、パートが実際に成功した後にだけ書かれ、完了が証明された後にだけ削除されます。サーバーの ETag を信じるのではなく自分で SHA-256 を持つのは、SSE-KMS の下では ETag がパートの MD5 ではなく、比較する相手がないからです。</p>
-    <p>もうひとつ、他のツールを見て学んだルール。未完了のマルチパートアップロードは通常のリストには見えず、誰かが中止するまで課金され続けます。RocketBucket はそれらを表示しますが、自分が作ったものでなければ決して中止しません。別のクライアントのものかもしれないからです。</p>
+    <h2>S3 にとって 500 GB とはどう見えるか</h2>
+    <p>S3 と、その API を話すすべてのサービスは、大きなファイルをひとつのリクエストでは受け取りません。受け取るのはパートです。最大 10,000 個、各パートは 5 MiB から 5 GiB、そして最後にそれらをひとつのオブジェクトに貼り合わせる呼び出しが一回。RocketBucket のデフォルトのパートは 8 MiB ですが、500 GB を 8 MiB で割ると 64,000 パートになるので、アップロード開始前に逆向きに計算します。500 GB ÷ 10,000、MiB 単位に切り上げて 52 MiB。この決定は永久です。最初のパートがサーバーに載ったあとでパートサイズは変えられず、再開はファイルをまったく同じ位置で切らなければ何も揃いません。</p>
+    <p>同時に飛んでいるのは 5 パート。ファイルはストリームで読まれ、丸ごと読み込まれることはないので、転送に必要なメモリはおよそ 5 パート＋バッファひとつ——約 300 MB——に、ネットワークライブラリ自身のコピーが乗ったものです。私たちが測った 900 MB から 1 GB はその範囲です。</p>
+    <p>アップロード中に書かれるものが二つあり、どちらも止まる瞬間のためだけに存在します。オブジェクトは作成時にランダムなコミットトークンをメタデータに刻まれます。そしてディスク上の小さなジャーナルにパートごとに一行——番号、サイズ、そのバイト列の私たち自身の SHA-256——が、サーバーがそのパートを<em>受け入れたあと</em>にだけ書かれます。サーバーの ETag を信じずに自分でハッシュするのは、SSE-KMS の下では ETag がパートの MD5 ではなく、あとで比較する相手がなくなるからです。</p>
 
-    <h2>9,800 パートをスキップするのに 14.5 GB のメモリ</h2>
-    <p>500 GB のアップロードを中断し、再開しました。メモリは 14.5 GB まで登り、macOS がプロセスを殺しました。同じファイルを最初からアップロードすると 700〜900 MB に収まります。</p>
-    <p>最初の容疑者はジャーナルでした。パートごとにファイル全体を書き直していたのです——10,000 パートなら、書くたびに育っていく JSON 文書を 10,000 回書き直す、ディスク上の二乗の仕事。64 パートごとにまとめて書くようにし、書き込み失敗は黙って消えるのではなく保留のまま残るようにして、もう一度走らせました。メモリは 14.5 GB まで登り、macOS がプロセスを殺しました。この修正は正しく、そしてそれは修正ではありませんでした。</p>
-    <p>本当の原因は「スキップ」の実装にありました。スキップの前にパートを検証するため、再開処理はファイルを 0 バイト目から読み、すべてのパートをハッシュしていました——すでにサーバー上にある 9,800 パートも含めて——一度も止まらない密なループの中で。各パートは小さな一時オブジェクトの雲を残し、そのひとつは恥ずかしいものでした。16 進エンコードに <code>String(format:)</code> を使っていて、1 バイトごとに Objective-C の文字列をひとつ確保していたのです。誰も回収しない、およそ 127,000 個の小さな確保。</p>
-    <p>構造的な修正はこうです。ジャーナルがあり、ソースがローカルファイルなら、欠けているパートだけをバイト範囲で読み、すでにアップロード済みのものには一切触れない。それらの内容はファイルの同一性——サイズ、更新日時、そして inode（同サイズの差し替えを捕まえるため）——とジャーナルのハッシュが保証します。すべてのパートがすでにある再開は、いまディスクから 0 バイトを読み、0 回のアップロードを発行します。10,000 パートの規模でまさにそれを断言するテストがあります。かつて死んでいた実物の 500 GB 再開は、欠けがなければ 500 MB 未満に、欠けを埋めている間はおよそ 700 MB〜1 GB に収まるようになりました。</p>
+    <h2>止まったときに起きること</h2>
+    <p>アップロードが止まる理由は二つ。接続が切れるか、あなたが停止を押すか。二つ目には告白が付いています。今週まで、大きな一つのファイルの途中で停止を押しても何も起きませんでした。キャンセルフラグはファイルとファイルの間でしか確認されず、9,847 パートのファイルはひとつのファイルです。修正済みです——キャンセルはいまパートのアップロードの中まで届き、飛んでいるパートのうちに効きます——そして見つかった経緯はこの話の大半と同じで、実際に 10 GB の再開を走らせてボタンを押したことでした。</p>
+    <p>どちらの場合も同じルールが適用されます。すべてを残す。ジャーナルはディスクに書き出され、サーバー上のマルチパートアップロードは中止<strong>されません</strong>。届いた 6,000 パートはアップロード ID の下に留まり、待ちます。待っている間は課金されます——S3 互換のストアはどれも未完了アップロードのパートに課金し、通常のリストには見えません——だから RocketBucket はバケットの未完了アップロードを表示し、削除できるようにしています。しかし自分から中止することは決してありません。自分が作ったものではないかもしれず、別のクライアントのものかもしれないからです。</p>
 
-    <h2>レビューが、速い経路が飛ばしたものを見つけた</h2>
-    <p>範囲読みの速い経路はレビューに出され、必須修正を 2 つ持ち帰りました。範囲読みが要求したすべてのバイトを返したか確認していなかった——最後のパートが短く読まれれば切り詰められたオブジェクトが完了し、サーバーはそれを受け入れたでしょう。そして <code>CompleteMultipartUpload</code> を直接呼び、遅い経路が持っていた照合ロジックを飛ばしていました。どちらも修正済みです。短い読みはいまアップロードを失敗させ、次の試行のためにジャーナルを残します。</p>
+    <h2>また始めたときに起きること</h2>
+    <p>同じファイルを同じ場所にドラッグします。RocketBucket はその 1 バイトも読む前に、そのキーの未完了アップロードをサーバーに列挙させ、ジャーナルと照合します。ハッシュもディスク読みもなし——何かを尋ねる前にやれるほど安いのです。それから尋ねます。これを再開するか、やり直すか（選んだアップロードだけを中止）、キャンセルするか。</p>
+    <p>再開を選ぶと、最初の確認は「これはまだ同じファイルか」。同じサイズ、同じ更新日時、同じ inode——だからまったく同じサイズの別ファイルに置き換えられたものはここで弾かれ、ジャーナルは信用されません。次にサーバーのパート一覧がジャーナルと一致しなければなりません。記録したすべてのパートが、記録した ETag とサイズで存在すること。そのときはじめて、それらのパートは採用されます。</p>
+    <p>採用されたパートは二度と読まれません。RocketBucket はそれらを飛び越え、欠けているパートだけをバイト範囲で読み、それぞれをハッシュしてジャーナルに書き、アップロードします。すべてのパートがすでにサーバーにある再開は、ディスクから 0 バイトを読み、0 回のアップロードを送ります。10,000 パートでまさにそれを断言するテストがあります。</p>
+    <p>最初の版はそうではなく、そしてその最初の版が、500 GB が何を意味するかを私たちに教えました。それはスキップの前に各パートを検証するため、ファイルを 0 バイト目から読み、すでにアップロード済みの 9,800 パートも含めてすべてのパートをハッシュしていました。一度も止まらないループの中で。メモリは 14.5 GB まで登り、macOS がそれを殺しました。最初に疑ったのはジャーナルでした——パートごとにファイル全体を書き直し、育ち続ける文書を一万回書き直していた——ので 64 パートごとにまとめました。それは本物のバグで正しい修正でしたが、再開はやはり 14.5 GB で死にました。本当の原因はハッシュのループにありました。16 進エンコードに <code>String(format:)</code> を使っていて、1 バイトごとに Objective-C の文字列をひとつ確保し、残されたおよそ 127,000 個の一時オブジェクトを誰も回収しなかったのです。欠けているパートだけを読むようにしたことで、その問いは消えました。</p>
 
-    <h2>終わった、そして「確信がない」と言った</h2>
-    <p>そして全部が通りました。500 GB すべて。ログにはこうありました。<em>アップロードの完了は不確かです。オブジェクトを手動で確認してください。</em></p>
-    <p>R2 を確認しました。オブジェクトはそこにありました。536,870,912,000 バイト、9,847 パート、メタデータには私たちのコミット印、残されたマルチパートアップロードはなし。完全な成功が失敗として報告されたのです。</p>
-    <p>RocketBucket は最後の Complete リクエストを送るとき、オブジェクトにランダムなトークンを刻みます。応答が失われても、後からサーバーに「オブジェクトはあるか、私のトークンを持っているか、私のサイズか」と尋ね、その答えが他人の同サイズのファイルではなく自分のアップロードについてだと分かるように。この問いには、この規模だとタイミングの問題があります。R2 は Complete を受け付けたあと、9,847 片をひとつのオブジェクトに組み立てるのに数十秒かけます。その間、オブジェクトはまだ存在せず、マルチパートアップロードはもう消えています。私たちの確認は「アップロードは消え、オブジェクトは不在」を見て、最大 4 秒間隔で 3 回試し、知ることはできないと結論しました。</p>
-    <p>いまは大きな完了にふさわしい待ち方をします——6 回、2、4、8、15、15、15 秒——そして「アップロードが消えている」を失敗ではなく曖昧として扱います。何を成功とするかは変わっていません。オブジェクトが応答し、私たちのトークンを持ち、期待どおりのサイズであること。トークンかサイズが違えば、やはり「確信がない」と言います。自分のものでないオブジェクトを名乗るより、不確かさを認めるほうを選びます。</p>
+    <h2>どう終わるか</h2>
+    <p>最後のパートが上がると、RocketBucket はパート 1 から 9,847 がすべて揃い、サイズの合計がファイルに一致することを確認して、Complete リクエストを送ります。小さなファイルならそこで終わりです。R2 上の 500 GB では、奇妙な 30 秒の始まりです。サーバーはリクエストを受け付け、それから 9,847 片をひとつのオブジェクトに組み立てるのに数十秒かけます。その間、オブジェクトはまだ存在せず、マルチパートアップロードはもう消えています。</p>
+    <p>これを知っているのは、最初の 500 GB の完了が<em>アップロードの完了は不確かです。オブジェクトを手動で確認してください</em>と報告したからです——そしてオブジェクトはそこにあり、完全で、私たちのトークンが付いていました。Complete が曖昧なときに走る照合は「オブジェクトはあるか、私のトークンを持ち、私のサイズか」と 4 秒間隔で 3 回尋ね、毎回「アップロードは消え、オブジェクトは不在」を見て、諦めていました。いまは 6 回——2、4、8、15、15、15 秒——尋ね、消えたアップロードを答えではなく問いとして扱います。成功の定義は動いていません。オブジェクトが応答し、私たちのトークンを持ち、期待どおりのサイズであること。トークンかサイズが違えば、やはり「確信がない」と言います。その代わりは、誰か他人のものかもしれないオブジェクトを名乗ることだからです。</p>
+    <p>レビューは出荷前の再開経路にさらに二つを見つけました。範囲読みが要求したすべてのバイトを返したか確認していなかったこと——サーバーが喜んで受け入れる切り詰められたオブジェクトを完了させ得た——と、速い経路が Complete を直接呼び、上の照合を飛ばしていたこと。どちらも修正済みです。</p>
+
+    <h2>その一回</h2>
+    <p>500 GB のアップロードを始める。止める。終了する。RocketBucket を開き、ファイルをもう一度ドラッグし、再開を選ぶ。サーバー上のパートを採用し、残りをアップロードし、完了し、組み立てを待ち、オブジェクトを確認する。536,870,912,000 バイト、9,847 パート、コミットトークンあり、残されたマルチパートアップロードなし。実行全体でのピークメモリは、およそ 900 MB から 1 GB。</p>
 
     <hr>
-    <p>設計文書にはこれらの状況すべてに節があり、すべての節は正しかった。失敗は、設計文書に含まれない 3 つのものの中にありました。アロケータ、育つファイル、そして九千片を貼り合わせるのに 30 秒を要するサーバー。これらはレビューでは見つかりません。500 GB をアップロードして見つかるのです。</p>
+    <p>これらすべての設計は 5 回レビューされ、正しかった。壊れたのはそのどこにもないものでした。アロケータ、育つジャーナル、間違ったループで確認されていた停止ボタン、そして九千片を貼り合わせるのに 30 秒を要するサーバー。これらはレビューでは見つかりません。500 GB をアップロードし、止め、また始めることで見つかるのです。</p>
 
-    <div class="callout"><strong>現在の状態。</strong>同一セッションとセッションをまたぐ再開は、S3 互換ストレージへのローカルファイルのアップロードについて現在のビルドに入っています。クラウド間の再開（たとえば S3 → R2）はまだソースを読み直します。バイト範囲の読み手がないためで、Range 付き GET が次の作業です。</div>
+    <div class="callout"><strong>現在の状態。</strong>同一セッションとセッションをまたぐ再開は、S3 互換ストレージへのローカルファイルのアップロードについて現在のビルドに入っています。クラウド間の再開（たとえば S3 → R2）はまだソースを読み直します。クラウドのソースにはまだバイト範囲の読み手がないためで、Range 付き GET が次の作業です。</div>
     <p class="outro">RocketBucket は S3、R2、B2、MinIO のためのデュアルペイン・ファイル転送アプリで、まもなく Mac App Store に登場します。<a href="https://rocketbucket.app/ja/">rocketbucket.app</a></p>
   </main>
 
   <!-- ============================== KO ============================== -->
   <main data-lang-page="ko" hidden>
     <a class="back" href="/notes/">← 개발 노트</a>
-    <h1>500 GB는 올라갔다. 앱은 확신이 없다고 했다</h1>
-    <p class="byline">2026년 9월 8일 · S3와 R2로의 이어올리기</p>
+    <h1>500 GB를 R2로: 거대한 업로드가 멈출 때, 그리고 다시 시작할 때 일어나는 일</h1>
+    <p class="byline">2026년 9월 8일 · RocketBucket의 멀티파트 업로드와 이어올리기</p>
 
-    <p class="lede">500 GB 파일을 RocketBucket으로 Cloudflare R2에 올렸습니다 — 9,847개 파트. 중단된 업로드를 이어가는 설계는 다섯 차례 리뷰를 거쳤고, 누가 봐도 옳았습니다. 그런데도 이 한 번의 실행은 세 번 실패했고, 그중 어느 것도 설계 안에 있지 않았습니다.</p>
+    <p class="lede">RocketBucket으로 500 GB 파일을 Cloudflare R2에 올리다가 중간에 멈추고, 다시 시작했습니다. 끝났습니다 — 536,870,912,000바이트, 9,847개 파트. 첫 파트부터 조립이 끝난 오브젝트까지 실행 내내 메모리를 지켜봤는데, 약 900 MB에서 1 GB를 넘은 적이 없습니다. 그 아래에서 무슨 일이 일어나는지, 그리고 이 문장이 참이 되기 전에 무엇을 고쳐야 했는지에 대한 이야기입니다.</p>
 
-    <h2>"이어올리기"가 약속해야 하는 것</h2>
-    <p>S3와 그 API를 말하는 모든 서비스는 큰 파일을 파트로 나눠 올립니다. 최대 10,000개, 각 파트는 5 MiB에서 5 GiB 사이. 500 GB라면 이 산술이 파트를 최소 52 MB로 강제하므로, RocketBucket은 평소의 8 MiB 기본값을 버리고 업로드가 시작되기 전에 이 파일을 위해 52 MiB를 고릅니다. 동시에 다섯 파트가 날아가고 — 약 260 MB의 메모리, 이것이 한 번의 전송에 필요한 예산 전부여야 합니다.</p>
-    <p>6,000번째 파트에서 연결이 끊기면, "이어올리기"란 같은 업로드 ID를 유지하고 그 6,000개를 다시 보내지 않는다는 뜻입니다. 위험은 입 밖에 내면 명백합니다. 그 사이에 파일이 바뀌었다면? 옛 파일의 앞부분에 새 파일의 뒷부분을 붙이게 되고, 서버는 기꺼이 그것을 오브젝트라 부를 것입니다. 그래서 모든 파트는 처음 완전히 읽힌 순간 기록됩니다 — 번호, 바이트 수, SHA-256 — 그리고 파트는 서버에 있으면서 동시에 그 기록과 일치할 때만 건너뜁니다. 세션을 넘어서는 경우 기록은 디스크의 작은 저널에 살고, 파트가 실제로 성공한 뒤에만 쓰이며, 완료가 증명된 뒤에만 지워집니다. 서버의 ETag를 믿지 않고 우리 자신의 SHA-256을 두는 이유는, SSE-KMS 아래에서는 ETag가 파트의 MD5가 아니라 비교할 대상이 없기 때문입니다.</p>
-    <p>다른 도구들을 보며 배운 규칙이 하나 더 있습니다. 미완료 멀티파트 업로드는 일반 목록에 보이지 않고, 누군가 중단하기 전까지 계속 과금됩니다. RocketBucket은 그것들을 보여주지만, 자기가 만들지 않은 것은 절대 중단하지 않습니다. 다른 클라이언트의 것일 수 있으니까요.</p>
+    <h2>S3에게 500 GB는 어떻게 보이는가</h2>
+    <p>S3와 그 API를 말하는 모든 서비스는 큰 파일을 요청 하나로 받지 않습니다. 파트로 받습니다. 최대 10,000개, 각 파트는 5 MiB에서 5 GiB 사이, 그리고 마지막에 그것들을 하나의 오브젝트로 붙이는 호출 한 번. RocketBucket의 기본 파트는 8 MiB지만 500 GB를 8 MiB로 나누면 64,000개 파트가 되므로, 업로드가 시작되기 전에 거꾸로 계산합니다. 500 GB ÷ 10,000, MiB 단위로 올림하면 52 MiB. 이 결정은 영구적입니다. 첫 파트가 서버에 올라간 뒤에는 파트 크기를 바꿀 수 없고, 이어올리기는 파일을 정확히 같은 자리에서 잘라야지 아니면 아무것도 맞지 않습니다.</p>
+    <p>동시에 다섯 파트가 날아갑니다. 파일은 스트리밍으로 읽히고 통째로 적재되지 않으므로, 전송에 필요한 메모리는 대략 다섯 파트 더하기 버퍼 하나 — 약 300 MB — 에 네트워크 라이브러리 자체의 복사본이 얹힌 정도입니다. 우리가 측정한 900 MB~1 GB가 그 범위입니다.</p>
+    <p>업로드가 진행되는 동안 두 가지가 기록되는데, 둘 다 멈추는 순간만을 위해 존재합니다. 오브젝트는 생성 시 메타데이터에 무작위 커밋 토큰이 찍힙니다. 그리고 디스크의 작은 저널에 파트마다 한 줄 — 번호, 크기, 그 바이트의 우리 자신의 SHA-256 — 이 서버가 그 파트를 <em>받아들인 뒤에만</em> 쓰입니다. 서버의 ETag를 믿지 않고 직접 해시하는 이유는, SSE-KMS 아래에서는 ETag가 파트의 MD5가 아니라 나중에 비교할 대상이 없어지기 때문입니다.</p>
 
-    <h2>9,800개 파트를 건너뛰는 데 14.5 GB의 메모리</h2>
-    <p>500 GB 업로드를 중단하고 다시 이어갔습니다. 메모리가 14.5 GB까지 올라갔고 macOS가 프로세스를 죽였습니다. 같은 파일을 처음부터 올리면 700~900 MB에 머무릅니다.</p>
-    <p>첫 용의자는 저널이었습니다. 파트마다 파일 전체를 다시 썼던 것입니다 — 10,000개 파트라면 쓸 때마다 커지는 JSON 문서를 10,000번 다시 쓰는, 디스크 위의 제곱 작업. 64개 파트마다 모아서 쓰게 하고, 실패한 쓰기는 조용히 사라지지 않고 보류 상태로 남게 한 뒤 다시 돌렸습니다. 메모리가 14.5 GB까지 올라갔고 macOS가 프로세스를 죽였습니다. 그 수정은 옳았고, 그것은 수정이 아니었습니다.</p>
-    <p>진짜 원인은 "건너뛰기"의 구현에 있었습니다. 건너뛰기 전에 파트를 검증하기 위해, 이어올리기 과정은 파일을 0바이트부터 읽어 모든 파트를 해시했습니다 — 이미 서버에 있는 9,800개까지 — 한 번도 멈추지 않는 빽빽한 루프 안에서. 파트마다 작은 임시 객체 구름을 남겼고, 그중 하나는 민망했습니다. 16진 인코딩에 <code>String(format:)</code>을 썼는데, 바이트 하나마다 Objective-C 문자열을 하나씩 할당합니다. 아무것도 회수하지 않는 약 127,000개의 작은 할당.</p>
-    <p>구조적인 수정은 이렇습니다. 저널이 있고 소스가 로컬 파일이면, 빠진 파트만 바이트 범위로 읽고 이미 올라간 것은 전혀 건드리지 않습니다. 그 내용은 파일의 정체성 — 크기, 수정 시각, 그리고 inode(같은 크기로 바꿔 넣은 파일을 잡아내기 위해) — 와 저널의 해시가 보증합니다. 모든 파트가 이미 있는 이어올리기는 이제 디스크에서 0바이트를 읽고 0번 업로드합니다. 10,000개 파트 규모에서 정확히 그것을 단언하는 테스트가 있습니다. 예전에 죽던 실제 500 GB 이어올리기는 이제 빠진 것이 없으면 500 MB 아래에, 빈틈을 채우는 동안에는 약 700 MB~1 GB에 머무릅니다.</p>
+    <h2>멈출 때 일어나는 일</h2>
+    <p>업로드가 멈추는 이유는 둘입니다. 연결이 끊기거나, 당신이 중지를 누르거나. 두 번째에는 고백이 붙어 있습니다. 이번 주까지, 큰 파일 하나의 중간에 중지를 눌러도 아무 일도 일어나지 않았습니다. 취소 플래그는 파일과 파일 사이에서만 확인됐고, 9,847개 파트의 파일은 하나의 파일입니다. 고쳤습니다 — 취소는 이제 파트 업로드 안까지 들어가 날아가고 있는 파트들 안에서 효력을 냅니다 — 그리고 발견된 방식은 이 글 대부분과 같습니다. 실제로 10 GB 이어올리기를 돌리고 버튼을 눌러 본 것.</p>
+    <p>어느 경우든 같은 규칙이 적용됩니다. 전부 남긴다. 저널은 디스크에 기록되고, 서버의 멀티파트 업로드는 중단<strong>되지 않습니다</strong>. 도착한 6,000개 파트는 업로드 ID 아래 그대로 남아 기다립니다. 기다리는 동안 과금됩니다 — 모든 S3 호환 스토리지는 미완료 업로드의 파트에 요금을 부과하고, 일반 목록에는 보이지 않습니다 — 그래서 RocketBucket은 버킷의 미완료 업로드를 보여주고 삭제할 수 있게 합니다. 하지만 스스로 중단하는 일은 절대 없습니다. 자기가 만든 것이 아닐 수도, 다른 클라이언트의 것일 수도 있으니까요.</p>
 
-    <h2>리뷰가 빠른 경로가 건너뛴 것을 찾았다</h2>
-    <p>범위 읽기 빠른 경로는 리뷰에 올라갔고 두 개의 필수 수정을 들고 돌아왔습니다. 범위 읽기가 요청한 바이트를 모두 돌려줬는지 확인하지 않았다 — 마지막 파트가 짧게 읽히면 잘린 오브젝트가 완료되고 서버는 그것을 받아들였을 것입니다. 그리고 <code>CompleteMultipartUpload</code>를 직접 호출해, 느린 경로가 가진 대조 로직을 건너뛰었습니다. 둘 다 고쳤습니다. 짧은 읽기는 이제 업로드를 실패시키고 다음 시도를 위해 저널을 남깁니다.</p>
+    <h2>다시 시작할 때 일어나는 일</h2>
+    <p>같은 파일을 같은 곳에 끌어다 놓습니다. RocketBucket은 그 파일의 한 바이트도 읽기 전에, 서버에서 그 키의 미완료 업로드를 나열하고 저널과 맞춰 봅니다. 해시도 디스크 읽기도 없이 — 무엇을 묻기 전에 해도 될 만큼 싼 작업입니다. 그런 다음 묻습니다. 이것을 이어갈지, 처음부터 할지(선택한 업로드만 중단), 취소할지.</p>
+    <p>이어가기를 선택하면 첫 확인은 이것이 아직 같은 파일인가입니다. 같은 크기, 같은 수정 시각, 같은 inode — 그래서 정확히 같은 크기의 다른 파일로 바꿔 놓은 것은 여기서 걸리고, 저널은 신뢰되지 않습니다. 다음으로 서버의 파트 목록이 저널과 일치해야 합니다. 우리가 기록한 모든 파트가, 기록한 ETag와 크기로 있어야 합니다. 그때에야 그 파트들이 채택됩니다.</p>
+    <p>채택된 파트는 다시 읽히지 않습니다. RocketBucket은 그것들을 건너뛰고 빠진 파트만 바이트 범위로 읽어, 각각을 해시해 저널에 쓰고 업로드합니다. 모든 파트가 이미 서버에 있는 이어올리기는 디스크에서 0바이트를 읽고 0번 업로드합니다. 10,000개 파트로 정확히 그것을 단언하는 테스트가 있습니다.</p>
+    <p>첫 버전은 그렇게 동작하지 않았고, 그 첫 버전이 500 GB가 무엇을 뜻하는지 우리에게 가르쳐 주었습니다. 건너뛰기 전에 각 파트를 검증하려고 파일을 0바이트부터 읽어 이미 올라간 9,800개까지 포함해 모든 파트를 해시했습니다. 한 번도 멈추지 않는 루프 안에서. 메모리가 14.5 GB까지 올라갔고 macOS가 죽였습니다. 처음엔 저널을 의심했습니다 — 파트마다 파일 전체를 다시 쓰고, 계속 자라는 문서를 만 번 다시 썼으니 — 그래서 64개 파트마다 묶었습니다. 그것은 진짜 버그였고 옳은 수정이었지만, 이어올리기는 여전히 14.5 GB에서 죽었습니다. 진짜 원인은 해시 루프에 있었습니다. 16진 인코딩에 <code>String(format:)</code>을 썼는데, 바이트마다 Objective-C 문자열을 하나씩 할당했고, 그것이 남긴 약 127,000개의 임시 객체를 아무것도 회수하지 않았습니다. 빠진 파트만 읽게 하자 그 질문 자체가 사라졌습니다.</p>
 
-    <h2>끝났다, 그리고 확신이 없다고 했다</h2>
-    <p>그리고 전부 올라갔습니다. 500 GB 모두. 로그에는 이렇게 적혔습니다. <em>업로드 완료 여부가 불확실합니다. 오브젝트를 직접 확인해 주세요.</em></p>
-    <p>R2를 확인했습니다. 오브젝트는 거기 있었습니다. 536,870,912,000바이트, 9,847개 파트, 메타데이터에 우리의 커밋 표식, 남은 멀티파트 업로드는 없음. 완전한 성공이 실패로 보고된 것입니다.</p>
-    <p>RocketBucket은 마지막 Complete 요청을 보낼 때 오브젝트에 무작위 토큰을 찍습니다. 응답을 잃어도 나중에 서버에 "오브젝트가 있는가, 내 토큰을 갖고 있는가, 내 크기인가"를 물어, 그 답이 남의 같은 크기 파일이 아니라 자기 업로드에 관한 것임을 알 수 있도록. 이 질문에는 이 규모에서 타이밍 문제가 있습니다. R2는 Complete를 받아들인 뒤 9,847조각을 하나의 오브젝트로 조립하는 데 수십 초를 씁니다. 그 동안 오브젝트는 아직 존재하지 않고 멀티파트 업로드는 이미 사라져 있습니다. 우리의 확인은 "업로드는 사라졌고 오브젝트는 없다"를 보고, 최대 4초 간격으로 세 번 시도한 뒤 알 수 없다고 결론지었습니다.</p>
-    <p>이제는 큰 완료에 어울리는 방식으로 기다립니다 — 여섯 번, 2, 4, 8, 15, 15, 15초 — 그리고 "업로드가 사라졌다"를 실패가 아닌 모호함으로 다룹니다. 무엇이 성공인지는 바뀌지 않았습니다. 오브젝트가 응답하고, 우리 토큰을 갖고, 정확히 기대한 크기여야 합니다. 토큰이나 크기가 다르면 여전히 확신이 없다고 말합니다. 우리 것이 아닌 오브젝트를 우리 것이라 주장하기보다 불확실함을 인정하는 편을 택합니다.</p>
+    <h2>어떻게 끝나는가</h2>
+    <p>마지막 파트가 올라가면 RocketBucket은 1번부터 9,847번 파트가 모두 있고 크기 합이 파일과 일치하는지 확인한 뒤 Complete 요청을 보냅니다. 작은 파일이라면 그것으로 끝입니다. R2의 500 GB에서는 기묘한 30초의 시작입니다. 서버는 요청을 받아들이고, 그런 다음 9,847조각을 하나의 오브젝트로 조립하는 데 수십 초를 씁니다. 그 동안 오브젝트는 아직 존재하지 않고, 멀티파트 업로드는 이미 사라져 있습니다.</p>
+    <p>이걸 아는 이유는, 첫 500 GB 완료가 <em>업로드 완료 여부가 불확실합니다. 오브젝트를 직접 확인해 주세요</em>라고 보고했기 때문입니다 — 그런데 오브젝트는 거기 있었고, 완전했고, 우리 토큰이 붙어 있었습니다. Complete가 모호할 때 도는 대조 로직은 "오브젝트가 있는가, 내 토큰을 갖고, 내 크기인가"를 4초 간격으로 세 번 물었고, 매번 "업로드는 사라졌고 오브젝트는 없다"를 보고 포기했습니다. 이제는 여섯 번 — 2, 4, 8, 15, 15, 15초 — 묻고, 사라진 업로드를 답이 아닌 질문으로 다룹니다. 성공의 정의는 움직이지 않았습니다. 오브젝트가 응답하고, 우리 토큰을 갖고, 정확히 기대한 크기여야 합니다. 토큰이나 크기가 다르면 여전히 확신이 없다고 말합니다. 그 대안은 남의 것일지도 모르는 오브젝트를 우리 것이라 주장하는 것이니까요.</p>
+    <p>리뷰는 출시 전 이어올리기 경로에서 두 가지를 더 찾았습니다. 범위 읽기가 요청한 바이트를 모두 돌려줬는지 확인하지 않았다는 것 — 서버가 기꺼이 받아들일 잘린 오브젝트를 완료시킬 수 있었습니다 — 그리고 빠른 경로가 Complete를 직접 호출해 위의 대조를 건너뛰었다는 것. 둘 다 고쳤습니다.</p>
+
+    <h2>그 한 번의 실행</h2>
+    <p>500 GB 업로드를 시작한다. 멈춘다. 앱을 종료한다. RocketBucket을 열고 파일을 다시 끌어다 놓고 이어가기를 선택한다. 서버의 파트를 채택하고, 나머지를 올리고, 완료하고, 조립을 기다리고, 오브젝트를 확인한다. 536,870,912,000바이트, 9,847개 파트, 커밋 토큰 있음, 남은 멀티파트 업로드 없음. 전체 실행의 최대 메모리는 약 900 MB에서 1 GB.</p>
 
     <hr>
-    <p>설계 문서에는 이 모든 상황에 대한 절이 있었고, 모든 절은 옳았습니다. 실패는 설계 문서에 들어 있지 않은 세 가지 안에 있었습니다. 할당자, 자라나는 파일, 그리고 구천 조각을 붙이는 데 30초가 필요한 서버. 이런 것들은 리뷰로 찾지 못합니다. 500 GB를 올려 봐야 찾습니다.</p>
+    <p>이 모든 것의 설계는 다섯 번 리뷰됐고 옳았습니다. 망가진 것은 그 어디에도 없는 것들이었습니다. 할당자, 자라나는 저널, 잘못된 루프에서 확인되던 중지 버튼, 그리고 구천 조각을 붙이는 데 30초가 필요한 서버. 이런 것들은 리뷰로 찾지 못합니다. 500 GB를 올리고, 멈추고, 다시 시작해 봐야 찾습니다.</p>
 
-    <div class="callout"><strong>현재 상태.</strong> 같은 세션과 세션을 넘어서는 이어올리기는 S3 호환 스토리지로의 로컬 파일 업로드에 대해 현재 빌드에 들어 있습니다. 클라우드 간 이어올리기(예: S3 → R2)는 아직 소스를 다시 읽습니다. 바이트 범위 읽기가 없기 때문이며, Range를 붙인 GET이 다음 작업입니다.</div>
+    <div class="callout"><strong>현재 상태.</strong> 같은 세션과 세션을 넘어서는 이어올리기는 S3 호환 스토리지로의 로컬 파일 업로드에 대해 현재 빌드에 들어 있습니다. 클라우드 간 이어올리기(예: S3 → R2)는 아직 소스를 다시 읽습니다. 클라우드 소스용 바이트 범위 읽기가 아직 없기 때문이며, Range를 붙인 GET이 다음 작업입니다.</div>
     <p class="outro">RocketBucket은 S3, R2, B2, MinIO를 위한 듀얼 페인 파일 전송 앱이며 곧 Mac App Store에 출시됩니다. <a href="https://rocketbucket.app/ko/">rocketbucket.app</a></p>
   </main>
 
@@ -280,10 +292,10 @@
       var LANGS = ["en", "zh", "ja", "ko"];
       var HTML_LANG = { en: "en", zh: "zh-Hant", ja: "ja", ko: "ko" };
       var TITLES = {
-        en: "500 GB went up. The app said it wasn't sure. — RocketBucket Notes",
-        zh: "500 GB 傳完了，App 卻說它不確定 — RocketBucket 開發筆記",
-        ja: "500 GB は上がった。アプリは「確信がない」と言った — RocketBucket 開発ノート",
-        ko: "500 GB는 올라갔다. 앱은 확신이 없다고 했다 — RocketBucket 개발 노트",
+        en: "500 GB to R2: what happens when a huge upload stops, and when it starts again — RocketBucket Notes",
+        zh: "500 GB 傳上 R2：大檔案中斷時發生什麼事，再接著傳時又發生什麼事 — RocketBucket 開發筆記",
+        ja: "500 GB を R2 へ：巨大なアップロードが止まったとき、そしてまた始めたときに起きること — RocketBucket 開発ノート",
+        ko: "500 GB를 R2로: 거대한 업로드가 멈출 때, 그리고 다시 시작할 때 일어나는 일 — RocketBucket 개발 노트",
       };
 
       function setLang(lang, remember) {
