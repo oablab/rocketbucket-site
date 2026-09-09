@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>500 GB 傳上 R2：大檔案中斷時發生什麼事，再接著傳時又發生什麼事 — RocketBucket 開發筆記</title>
+  <meta name="description" content="RocketBucket 的分段上傳與續傳：9,847 段、續傳時零次重讀、會等 R2 組裝完成的完成證明。記憶體峰值約 900 MB 到 1 GB。">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="500 GB 傳上 R2：大檔案中斷時發生什麼事，再接著傳時又發生什麼事">
+  <meta property="og:description" content="RocketBucket 的分段上傳與續傳：9,847 段、續傳時零次重讀、會等 R2 組裝完成的完成證明。記憶體峰值約 900 MB 到 1 GB。">
+  <meta property="og:url" content="https://rocketbucket.app/zh/notes/500-gb-not-sure/">
+  <meta property="og:image" content="https://rocketbucket.app/zh/notes/500-gb-not-sure/og-card.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:site_name" content="RocketBucket">
+  <meta property="og:locale" content="zh_TW">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="500 GB 傳上 R2：大檔案中斷時發生什麼事，再接著傳時又發生什麼事">
+  <meta name="twitter:description" content="RocketBucket 的分段上傳與續傳：9,847 段、續傳時零次重讀、會等 R2 組裝完成的完成證明。記憶體峰值約 900 MB 到 1 GB。">
+  <meta name="twitter:image" content="https://rocketbucket.app/zh/notes/500-gb-not-sure/og-card.png">
+  <link rel="canonical" href="https://rocketbucket.app/zh/notes/500-gb-not-sure/">
+  <link rel="alternate" hreflang="en" href="https://rocketbucket.app/notes/500-gb-not-sure/">
+  <link rel="alternate" hreflang="zh-Hant" href="https://rocketbucket.app/zh/notes/500-gb-not-sure/">
+  <link rel="alternate" hreflang="ja" href="https://rocketbucket.app/ja/notes/500-gb-not-sure/">
+  <link rel="alternate" hreflang="ko" href="https://rocketbucket.app/ko/notes/500-gb-not-sure/">
+  <link rel="alternate" hreflang="x-default" href="https://rocketbucket.app/notes/500-gb-not-sure/">
+  <link rel="icon" type="image/png" href="/icon.png">
+  <link rel="apple-touch-icon" href="/icon.png">
+  <style>
+    :root {
+      --orange: #F2600C;
+      --orange-deep: #B84A08;
+      --orange-tint: #FBE8DA;
+      --ink: #22262E;
+      --muted: #6B7280;
+      --bg: #F7F5F1;
+      --card: #FFFFFF;
+      --border: rgba(34, 38, 46, 0.13);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --orange: #FF8A3D;
+        --orange-deep: #FFA05C;
+        --orange-tint: #3A2414;
+        --ink: #ECEDF0;
+        --muted: #9AA3B2;
+        --bg: #12161F;
+        --card: #1B212D;
+        --border: rgba(255, 138, 61, 0.18);
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      line-height: 1.72;
+      -webkit-font-smoothing: antialiased;
+    }
+    html[lang="zh-Hant"] body { font-family: "PingFang TC", "SF Pro TC", -apple-system, BlinkMacSystemFont, "Heiti TC", "Microsoft JhengHei", sans-serif; line-height: 1.8; }
+    html[lang="ja"] body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro JP", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", sans-serif; line-height: 1.8; }
+    html[lang="ko"] body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro KR", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif; line-height: 1.8; word-break: keep-all; }
+    nav {
+      position: sticky; top: 0; z-index: 10;
+      display: flex; align-items: center; justify-content: space-between;
+      max-width: 860px; margin: 0 auto; padding: 0.9rem 1.5rem;
+      backdrop-filter: saturate(180%) blur(16px);
+      gap: 0.75rem; flex-wrap: wrap;
+    }
+    nav .brand { display: flex; align-items: center; gap: 0.55rem; font-weight: 700; font-size: 1.05rem; text-decoration: none; color: var(--ink); }
+    nav .brand img { width: 28px; height: 28px; border-radius: 7px; }
+    .lang-switch {
+      display: inline-flex; gap: 0.25rem;
+      padding: 0.22rem; border-radius: 999px;
+      background: var(--card); border: 1px solid var(--border);
+    }
+    .lang-switch a, .lang-switch button {
+      font: inherit; font-size: 0.85rem; font-weight: 600; color: var(--muted);
+      background: none; border: 0; cursor: pointer; text-decoration: none;
+      padding: 0.3rem 0.75rem; border-radius: 999px;
+    }
+    .lang-switch a[aria-current="page"], .lang-switch button[aria-selected="true"] {
+      background: var(--bg); color: var(--ink);
+      box-shadow: 0 1px 3px rgba(34, 38, 46, 0.14);
+    }
+    main { max-width: 680px; margin: 0 auto; padding: 2.5rem 1.5rem 4rem; }
+    main[hidden] { display: none; }
+    .back { display: inline-block; color: var(--muted); text-decoration: none; font-size: 0.88rem; margin-bottom: 1.6rem; }
+    .back:hover { color: var(--orange-deep); }
+    h1 {
+      font-size: clamp(1.9rem, 4.6vw, 2.5rem);
+      line-height: 1.15; letter-spacing: -0.015em; font-weight: 700;
+    }
+    html[lang="zh-Hant"] h1, html[lang="ja"] h1, html[lang="ko"] h1 { font-weight: 800; letter-spacing: 0; line-height: 1.25; }
+    .byline { color: var(--muted); font-size: 0.9rem; margin-top: 0.7rem; }
+    h2 {
+      font-size: 1.3rem; font-weight: 700; letter-spacing: -0.01em;
+      margin: 2.6rem 0 0.8rem;
+    }
+    p { margin-top: 1rem; font-size: 1.02rem; }
+    .lede { font-size: 1.1rem; }
+    ul { margin-top: 0.8rem; padding-left: 1.3rem; }
+    li { margin-bottom: 0.6rem; }
+    li::marker { color: var(--orange); }
+    strong { color: var(--orange-deep); }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 0.86em; background: var(--card);
+      border: 1px solid var(--border); border-radius: 5px; padding: 0.08em 0.35em;
+    }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2.6rem 0 0; }
+    .callout {
+      background: var(--orange-tint); border-radius: 14px;
+      padding: 1.1rem 1.4rem; margin-top: 2.4rem;
+      font-size: 1.02rem;
+    }
+    .callout strong { color: var(--orange-deep); }
+    .tldr {
+      background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--orange);
+      border-radius: 14px; padding: 1.1rem 1.4rem 1.2rem; margin-top: 1.8rem; font-size: 0.98rem;
+    }
+    .tldr .label { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--orange-deep); }
+    .tldr ul { margin-top: 0.6rem; padding-left: 1.1rem; }
+    .tldr li { margin-bottom: 0.5rem; }
+    .tldr li:last-child { margin-bottom: 0; }
+    .tldr b { color: var(--ink); font-weight: 700; }
+    .outro { color: var(--muted); font-size: 0.95rem; }
+    .outro a { color: var(--orange-deep); }
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 2.2rem 1.5rem; text-align: center;
+      color: var(--muted); font-size: 0.88rem;
+    }
+    footer a { color: var(--orange-deep); text-decoration: none; margin: 0 0.4rem; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a class="brand" href="/zh/"><img src="/icon.png" alt="" width="28" height="28">RocketBucket</a>
+    <div class="lang-switch" aria-label="Language"><a href="/notes/500-gb-not-sure/">EN</a><a href="/zh/notes/500-gb-not-sure/" aria-current="page">中文</a><a href="/ja/notes/500-gb-not-sure/">日本語</a><a href="/ko/notes/500-gb-not-sure/">한국어</a></div>
+  </nav>
+
+  <main>
+    <a class="back" href="/zh/notes/">← 開發筆記</a>
+    <h1>500 GB 傳上 R2：大檔案中斷時發生什麼事，再接著傳時又發生什麼事</h1>
+    <p class="byline">2026 年 9 月 8 日 · RocketBucket 的分段上傳與續傳</p>
+    <div class="tldr">
+      <div class="label">TL;DR</div>
+      <ul>
+        <li><b>超大檔案：</b>用 S3 分段上傳、串流讀取，從不整個載入記憶體。500 GB 就是 9,847 段、每段 52 MiB、同時傳五段。已對 Cloudflare R2 完整實測。</li>
+        <li><b>中斷了：</b>什麼都不會丟。已上傳的分段留在 server 上，磁碟上的 journal 逐段記錄。續傳——就算已經關掉 App——會先確認是同一個檔案，直接採用那些分段而不重讀，只補缺少的。</li>
+        <li><b>孤兒 chunks：</b>未完成的上傳會顯示在 bucket 裡讓你刪除；刪之前是持續計費的。RocketBucket 絕不自動 abort，因為那可能是別的 client 的。</li>
+        <li><b>記憶體：</b>整趟 500 GB（含續傳）峰值約 900 MB 到 1 GB。所有分段都已在 server 上時，續傳的峰值只有 49.1 MB——因為什麼都不用讀。</li>
+      </ul>
+    </div>
+
+    <p class="lede">我們用 RocketBucket 把一個 500 GB 的檔案傳上 Cloudflare R2，中途停下，再接著傳。它完成了——536,870,912,000 個位元組，9,847 個分段。整趟我們一直盯著記憶體，從第一段到物件組裝完成，最高沒有超過大約 900 MB 到 1 GB。這篇講的是底下發生的事，以及在這句話成立之前我們得先修掉什麼。</p>
+
+    <h2>對 S3 來說，500 GB 長什麼樣</h2>
+    <p>S3 和所有說 S3 協議的服務，都不會用一個請求收下一個大檔案。它收的是分段：最多 10,000 段，每段介於 5 MiB 到 5 GiB，最後再用一個呼叫把它們黏成一個物件。RocketBucket 預設一段 8 MiB，但 500 GB 除以 8 MiB 是 64,000 段，所以上傳開始前它反過來算：500 GB ÷ 10,000，進位到整數 MiB，是 52 MiB。這個決定是永久的。第一段上了 server 之後分段大小就不能改，續傳時必須在一模一樣的位置切開檔案，否則什麼都對不上。</p>
+    <p>同時有五段在傳。檔案是串流讀取、不是整個載入，所以一次傳輸需要的記憶體大約是五段加一個緩衝——約 300 MB——再加上網路程式庫自己的複本。我們量到的 900 MB 到 1 GB 就是這個範圍。</p>
+    <p>上傳進行中會寫兩樣東西，兩樣都只為了中斷那一刻而存在。物件在建立時就被蓋上一個隨機的 commit token，放在 metadata 裡。磁碟上一個小小的 journal 則每段記一行——編號、大小、以及我們自己算的這段位元組的 SHA-256——而且只在 server <em>接受</em>那一段之後才寫。我們自己算 hash 而不信 server 的 ETag，是因為在 SSE-KMS 之下 ETag 不是該段的 MD5，之後會沒東西可比。</p>
+
+    <h2>中斷時發生什麼事</h2>
+    <p>上傳會停下有兩個原因：連線斷了，或你按了停止。第二個附帶一個自白。直到這週為止，在單一大檔案傳輸中按停止是沒有作用的。取消旗標只在檔案之間檢查，而一個 9,847 段的檔案是一個檔案。修好了——取消現在會進到分段上傳裡面，在正在傳的那幾段之內生效——而它被發現的方式跟這篇大部分的事一樣：實際跑一次 10 GB 的續傳，然後按那顆按鈕。</p>
+    <p>不管哪種原因，規則相同：全部保留。journal 寫回磁碟，server 上的分段上傳<strong>不</strong> abort。已經上去的 6,000 段留在那裡，掛在它們的 upload ID 底下等著。等待期間是要計費的——每個 S3 相容的儲存都會對未完成上傳的分段收費，而且它們在一般列表裡看不見——所以 RocketBucket 會顯示 bucket 裡未完成的上傳，讓你刪。但它絕不自己 abort 任何一個。那可能不是它建立的；可能屬於別的 client。</p>
+
+    <h2>再接著傳時發生什麼事</h2>
+    <p>你把同一個檔案拖到同一個地方。在 RocketBucket 讀它任何一個位元組之前，它會先列出 server 上這個 key 的未完成上傳，跟 journal 比對。不算 hash、不讀磁碟——便宜到可以在問你任何事之前先做。然後它問你：續傳這一個、從頭來（只 abort 你選的那個上傳）、還是取消。</p>
+    <p>選了續傳，第一個檢查是這還是不是同一個檔案。同樣的大小、同樣的修改時間、同樣的 inode——所以一個被換成另一個大小完全相同的檔案會在這裡被擋下，journal 不會被採信。接著 server 的分段清單必須跟 journal 一致：我們記錄過的每一段都要在，ETag 和大小都要跟記錄相符。到這時那些分段才會被採用。</p>
+    <p>被採用的分段不會再讀一次。RocketBucket 跳過它們，只依位元組範圍讀缺少的那些段，每段算 hash 寫進 journal，然後上傳。一次每段都已經在 server 上的續傳，從磁碟讀零個位元組、送出零次上傳；有一個 10,000 段的測試就恰恰斷言這件事。</p>
+    <p>第一版不是這樣做的，而第一版就是我們學到 500 GB 是什麼意思的方式。它為了在跳過之前驗證每一段，從第 0 個位元組讀整個檔案、把每一段都算一遍 hash——包括已經上傳的 9,800 段——在一個從不暫停的迴圈裡。記憶體爬到 14.5 GB，macOS 把它殺了。我們先懷疑 journal——它每段都把整份檔案重寫一次，一份越寫越大的文件重寫一萬次——把它改成每 64 段批次寫。那是真的 bug、也是正確的修法，而續傳還是死在 14.5 GB。真正的原因在算 hash 的迴圈裡：十六進位轉換用了 <code>String(format:)</code>，每個位元組配置一個 Objective-C 字串，它留下的大約 127,000 個暫存物件沒有任何東西去回收。改成只讀缺少的分段之後，這個問題就不存在了。</p>
+
+    <h2>它怎麼完成</h2>
+    <p>最後一段上去之後，RocketBucket 檢查第 1 到第 9,847 段全部在場、大小加起來等於檔案，然後送出 Complete 請求。小檔案到這裡就結束了。500 GB 在 R2 上，這是一段奇怪的半分鐘的開始：server 回應了請求，然後花幾十秒把 9,847 片組裝成一個物件。在那段時間裡，物件還不存在，而分段上傳已經不見了。</p>
+    <p>我們知道這件事，是因為第一次 500 GB 完成時回報了<em>上傳的完成狀態不確定，請手動確認物件</em>——而物件就在那裡，完整，上面有我們的 token。Complete 結果模糊時跑的核對邏輯問了「物件在嗎？帶著我的 token、是我的大小嗎？」三次、間隔四秒，每次都看到「上傳不見了、物件不在」，然後放棄。現在它問六次——2、4、8、15、15、15 秒——並且把消失的上傳當成一個問題，而不是一個答案。成功的定義沒有動：物件必須回應、帶著我們的 token、大小完全等於預期。token 或大小不對，我們仍然說不確定，因為另一個選項是認領一個可能屬於別人的物件。</p>
+    <p>Review 在續傳路徑出貨前還找到兩件事：範圍讀取沒有檢查是否真的回傳了要求的每個位元組，這可能會完成一個被截斷的物件、而 server 會欣然接受；還有快速路徑直接呼叫 Complete，繞過了上面的核對。兩個都修了。</p>
+
+    <h2>這一趟</h2>
+    <p>開始傳 500 GB。停下。關掉 App。打開 RocketBucket，再拖一次檔案，選續傳。它採用 server 上的分段，上傳剩下的，送出 Complete，等組裝完成，確認物件：536,870,912,000 個位元組、9,847 段、commit token 在、沒有殘留的分段上傳。整趟的記憶體峰值，大約 900 MB 到 1 GB。</p>
+
+    <hr>
+    <p>這一切的設計 review 了五輪，而且是對的。壞掉的地方全都不在設計裡：一個配置器、一份會長大的 journal、一顆在錯的迴圈裡檢查的停止按鈕、一台需要半分鐘把九千片黏起來的 server。這些不是 review 能找到的。是把 500 GB 傳上去、停下、再接著傳才找到的。</p>
+
+    <div class="callout"><strong>目前狀態。</strong>同一 session 與跨 session 的續傳都在現在的版本裡，適用於本機檔案上傳到 S3 相容儲存。雲到雲的續傳（比如 S3 → R2）目前仍會重新讀取來源，因為雲端來源還沒有依範圍讀取的機制；帶 Range 的 GET 是下一項工作。</div>
+    <p class="outro">RocketBucket 是給 S3、R2、B2 與 MinIO 的雙欄檔案傳輸工具，即將上架 Mac App Store。<a href="https://rocketbucket.app/zh/">rocketbucket.app</a></p>
+  </main>
+
+  <footer>
+    © 2026 RocketBucket · <a href="/zh/">rocketbucket.app</a> · <a href="/zh/notes/">開發筆記</a> · <a href="/privacy/">隱私權政策</a> · <a href="mailto:tautiu.dev@gmail.com">支援</a>
+  </footer>
+</body>
+</html>

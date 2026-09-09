@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>500 GB を R2 へ：巨大なアップロードが止まったとき、そしてまた始めたときに起きること — RocketBucket 開発ノート</title>
+  <meta name="description" content="RocketBucket のマルチパートアップロードと再開：9,847 パート、再開時の再読み込みゼロ、R2 の組み立てを待つ完了証明。ピークメモリはおよそ 900 MB〜1 GB。">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="500 GB を R2 へ：巨大なアップロードが止まったとき、そしてまた始めたときに起きること">
+  <meta property="og:description" content="RocketBucket のマルチパートアップロードと再開：9,847 パート、再開時の再読み込みゼロ、R2 の組み立てを待つ完了証明。ピークメモリはおよそ 900 MB〜1 GB。">
+  <meta property="og:url" content="https://rocketbucket.app/ja/notes/500-gb-not-sure/">
+  <meta property="og:image" content="https://rocketbucket.app/ja/notes/500-gb-not-sure/og-card.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:site_name" content="RocketBucket">
+  <meta property="og:locale" content="ja_JP">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="500 GB を R2 へ：巨大なアップロードが止まったとき、そしてまた始めたときに起きること">
+  <meta name="twitter:description" content="RocketBucket のマルチパートアップロードと再開：9,847 パート、再開時の再読み込みゼロ、R2 の組み立てを待つ完了証明。ピークメモリはおよそ 900 MB〜1 GB。">
+  <meta name="twitter:image" content="https://rocketbucket.app/ja/notes/500-gb-not-sure/og-card.png">
+  <link rel="canonical" href="https://rocketbucket.app/ja/notes/500-gb-not-sure/">
+  <link rel="alternate" hreflang="en" href="https://rocketbucket.app/notes/500-gb-not-sure/">
+  <link rel="alternate" hreflang="zh-Hant" href="https://rocketbucket.app/zh/notes/500-gb-not-sure/">
+  <link rel="alternate" hreflang="ja" href="https://rocketbucket.app/ja/notes/500-gb-not-sure/">
+  <link rel="alternate" hreflang="ko" href="https://rocketbucket.app/ko/notes/500-gb-not-sure/">
+  <link rel="alternate" hreflang="x-default" href="https://rocketbucket.app/notes/500-gb-not-sure/">
+  <link rel="icon" type="image/png" href="/icon.png">
+  <link rel="apple-touch-icon" href="/icon.png">
+  <style>
+    :root {
+      --orange: #F2600C;
+      --orange-deep: #B84A08;
+      --orange-tint: #FBE8DA;
+      --ink: #22262E;
+      --muted: #6B7280;
+      --bg: #F7F5F1;
+      --card: #FFFFFF;
+      --border: rgba(34, 38, 46, 0.13);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --orange: #FF8A3D;
+        --orange-deep: #FFA05C;
+        --orange-tint: #3A2414;
+        --ink: #ECEDF0;
+        --muted: #9AA3B2;
+        --bg: #12161F;
+        --card: #1B212D;
+        --border: rgba(255, 138, 61, 0.18);
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      line-height: 1.72;
+      -webkit-font-smoothing: antialiased;
+    }
+    html[lang="zh-Hant"] body { font-family: "PingFang TC", "SF Pro TC", -apple-system, BlinkMacSystemFont, "Heiti TC", "Microsoft JhengHei", sans-serif; line-height: 1.8; }
+    html[lang="ja"] body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro JP", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", sans-serif; line-height: 1.8; }
+    html[lang="ko"] body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro KR", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif; line-height: 1.8; word-break: keep-all; }
+    nav {
+      position: sticky; top: 0; z-index: 10;
+      display: flex; align-items: center; justify-content: space-between;
+      max-width: 860px; margin: 0 auto; padding: 0.9rem 1.5rem;
+      backdrop-filter: saturate(180%) blur(16px);
+      gap: 0.75rem; flex-wrap: wrap;
+    }
+    nav .brand { display: flex; align-items: center; gap: 0.55rem; font-weight: 700; font-size: 1.05rem; text-decoration: none; color: var(--ink); }
+    nav .brand img { width: 28px; height: 28px; border-radius: 7px; }
+    .lang-switch {
+      display: inline-flex; gap: 0.25rem;
+      padding: 0.22rem; border-radius: 999px;
+      background: var(--card); border: 1px solid var(--border);
+    }
+    .lang-switch a, .lang-switch button {
+      font: inherit; font-size: 0.85rem; font-weight: 600; color: var(--muted);
+      background: none; border: 0; cursor: pointer; text-decoration: none;
+      padding: 0.3rem 0.75rem; border-radius: 999px;
+    }
+    .lang-switch a[aria-current="page"], .lang-switch button[aria-selected="true"] {
+      background: var(--bg); color: var(--ink);
+      box-shadow: 0 1px 3px rgba(34, 38, 46, 0.14);
+    }
+    main { max-width: 680px; margin: 0 auto; padding: 2.5rem 1.5rem 4rem; }
+    main[hidden] { display: none; }
+    .back { display: inline-block; color: var(--muted); text-decoration: none; font-size: 0.88rem; margin-bottom: 1.6rem; }
+    .back:hover { color: var(--orange-deep); }
+    h1 {
+      font-size: clamp(1.9rem, 4.6vw, 2.5rem);
+      line-height: 1.15; letter-spacing: -0.015em; font-weight: 700;
+    }
+    html[lang="zh-Hant"] h1, html[lang="ja"] h1, html[lang="ko"] h1 { font-weight: 800; letter-spacing: 0; line-height: 1.25; }
+    .byline { color: var(--muted); font-size: 0.9rem; margin-top: 0.7rem; }
+    h2 {
+      font-size: 1.3rem; font-weight: 700; letter-spacing: -0.01em;
+      margin: 2.6rem 0 0.8rem;
+    }
+    p { margin-top: 1rem; font-size: 1.02rem; }
+    .lede { font-size: 1.1rem; }
+    ul { margin-top: 0.8rem; padding-left: 1.3rem; }
+    li { margin-bottom: 0.6rem; }
+    li::marker { color: var(--orange); }
+    strong { color: var(--orange-deep); }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 0.86em; background: var(--card);
+      border: 1px solid var(--border); border-radius: 5px; padding: 0.08em 0.35em;
+    }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2.6rem 0 0; }
+    .callout {
+      background: var(--orange-tint); border-radius: 14px;
+      padding: 1.1rem 1.4rem; margin-top: 2.4rem;
+      font-size: 1.02rem;
+    }
+    .callout strong { color: var(--orange-deep); }
+    .tldr {
+      background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--orange);
+      border-radius: 14px; padding: 1.1rem 1.4rem 1.2rem; margin-top: 1.8rem; font-size: 0.98rem;
+    }
+    .tldr .label { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--orange-deep); }
+    .tldr ul { margin-top: 0.6rem; padding-left: 1.1rem; }
+    .tldr li { margin-bottom: 0.5rem; }
+    .tldr li:last-child { margin-bottom: 0; }
+    .tldr b { color: var(--ink); font-weight: 700; }
+    .outro { color: var(--muted); font-size: 0.95rem; }
+    .outro a { color: var(--orange-deep); }
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 2.2rem 1.5rem; text-align: center;
+      color: var(--muted); font-size: 0.88rem;
+    }
+    footer a { color: var(--orange-deep); text-decoration: none; margin: 0 0.4rem; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a class="brand" href="/ja/"><img src="/icon.png" alt="" width="28" height="28">RocketBucket</a>
+    <div class="lang-switch" aria-label="Language"><a href="/notes/500-gb-not-sure/">EN</a><a href="/zh/notes/500-gb-not-sure/">中文</a><a href="/ja/notes/500-gb-not-sure/" aria-current="page">日本語</a><a href="/ko/notes/500-gb-not-sure/">한국어</a></div>
+  </nav>
+
+  <main>
+    <a class="back" href="/ja/notes/">← 開発ノート</a>
+    <h1>500 GB を R2 へ：巨大なアップロードが止まったとき、そしてまた始めたときに起きること</h1>
+    <p class="byline">2026 年 9 月 8 日 · RocketBucket のマルチパートアップロードと再開</p>
+    <div class="tldr">
+      <div class="label">TL;DR</div>
+      <ul>
+        <li><b>巨大ファイル：</b>S3 マルチパートでストリーミングアップロード。メモリに丸ごと載せることはありません。500 GB なら 52 MiB × 9,847 パート、同時 5 パート。Cloudflare R2 で最後まで実測済み。</li>
+        <li><b>中断したら：</b>何も失われません。送信済みパートはサーバーに残り、ディスク上のジャーナルが一つずつ記録します。再開は——アプリを終了した後でも——同じファイルであることを確認し、それらのパートを読み直さずに引き継ぎ、欠けている分だけを送ります。</li>
+        <li><b>孤児パート：</b>未完了アップロードはバケット内に表示され、削除できます。削除するまで課金されます。RocketBucket が自動で中止することはありません。別のクライアントのものかもしれないからです。</li>
+        <li><b>メモリ：</b>再開を含む 500 GB の全行程でピーク約 900 MB〜1 GB。全パートがすでにサーバーにある再開はピーク 49.1 MB——何も読まないからです。</li>
+      </ul>
+    </div>
+
+    <p class="lede">RocketBucket で 500 GB のファイルを Cloudflare R2 にアップロードし、途中で止め、もう一度始めました。完了しました——536,870,912,000 バイト、9,847 パート。最初のパートから組み立てられたオブジェクトまで、実行中ずっとメモリを見ていましたが、およそ 900 MB から 1 GB を超えることはありませんでした。その下で何が起きているのか、そしてこの文が真になる前に何を直さなければならなかったのか、という話です。</p>
+
+    <h2>S3 にとって 500 GB とはどう見えるか</h2>
+    <p>S3 と、その API を話すすべてのサービスは、大きなファイルをひとつのリクエストでは受け取りません。受け取るのはパートです。最大 10,000 個、各パートは 5 MiB から 5 GiB、そして最後にそれらをひとつのオブジェクトに貼り合わせる呼び出しが一回。RocketBucket のデフォルトのパートは 8 MiB ですが、500 GB を 8 MiB で割ると 64,000 パートになるので、アップロード開始前に逆向きに計算します。500 GB ÷ 10,000、MiB 単位に切り上げて 52 MiB。この決定は永久です。最初のパートがサーバーに載ったあとでパートサイズは変えられず、再開はファイルをまったく同じ位置で切らなければ何も揃いません。</p>
+    <p>同時に飛んでいるのは 5 パート。ファイルはストリームで読まれ、丸ごと読み込まれることはないので、転送に必要なメモリはおよそ 5 パート＋バッファひとつ——約 300 MB——に、ネットワークライブラリ自身のコピーが乗ったものです。私たちが測った 900 MB から 1 GB はその範囲です。</p>
+    <p>アップロード中に書かれるものが二つあり、どちらも止まる瞬間のためだけに存在します。オブジェクトは作成時にランダムなコミットトークンをメタデータに刻まれます。そしてディスク上の小さなジャーナルにパートごとに一行——番号、サイズ、そのバイト列の私たち自身の SHA-256——が、サーバーがそのパートを<em>受け入れたあと</em>にだけ書かれます。サーバーの ETag を信じずに自分でハッシュするのは、SSE-KMS の下では ETag がパートの MD5 ではなく、あとで比較する相手がなくなるからです。</p>
+
+    <h2>止まったときに起きること</h2>
+    <p>アップロードが止まる理由は二つ。接続が切れるか、あなたが停止を押すか。二つ目には告白が付いています。今週まで、大きな一つのファイルの途中で停止を押しても何も起きませんでした。キャンセルフラグはファイルとファイルの間でしか確認されず、9,847 パートのファイルはひとつのファイルです。修正済みです——キャンセルはいまパートのアップロードの中まで届き、飛んでいるパートのうちに効きます——そして見つかった経緯はこの話の大半と同じで、実際に 10 GB の再開を走らせてボタンを押したことでした。</p>
+    <p>どちらの場合も同じルールが適用されます。すべてを残す。ジャーナルはディスクに書き出され、サーバー上のマルチパートアップロードは中止<strong>されません</strong>。届いた 6,000 パートはアップロード ID の下に留まり、待ちます。待っている間は課金されます——S3 互換のストアはどれも未完了アップロードのパートに課金し、通常のリストには見えません——だから RocketBucket はバケットの未完了アップロードを表示し、削除できるようにしています。しかし自分から中止することは決してありません。自分が作ったものではないかもしれず、別のクライアントのものかもしれないからです。</p>
+
+    <h2>また始めたときに起きること</h2>
+    <p>同じファイルを同じ場所にドラッグします。RocketBucket はその 1 バイトも読む前に、そのキーの未完了アップロードをサーバーに列挙させ、ジャーナルと照合します。ハッシュもディスク読みもなし——何かを尋ねる前にやれるほど安いのです。それから尋ねます。これを再開するか、やり直すか（選んだアップロードだけを中止）、キャンセルするか。</p>
+    <p>再開を選ぶと、最初の確認は「これはまだ同じファイルか」。同じサイズ、同じ更新日時、同じ inode——だからまったく同じサイズの別ファイルに置き換えられたものはここで弾かれ、ジャーナルは信用されません。次にサーバーのパート一覧がジャーナルと一致しなければなりません。記録したすべてのパートが、記録した ETag とサイズで存在すること。そのときはじめて、それらのパートは採用されます。</p>
+    <p>採用されたパートは二度と読まれません。RocketBucket はそれらを飛び越え、欠けているパートだけをバイト範囲で読み、それぞれをハッシュしてジャーナルに書き、アップロードします。すべてのパートがすでにサーバーにある再開は、ディスクから 0 バイトを読み、0 回のアップロードを送ります。10,000 パートでまさにそれを断言するテストがあります。</p>
+    <p>最初の版はそうではなく、そしてその最初の版が、500 GB が何を意味するかを私たちに教えました。それはスキップの前に各パートを検証するため、ファイルを 0 バイト目から読み、すでにアップロード済みの 9,800 パートも含めてすべてのパートをハッシュしていました。一度も止まらないループの中で。メモリは 14.5 GB まで登り、macOS がそれを殺しました。最初に疑ったのはジャーナルでした——パートごとにファイル全体を書き直し、育ち続ける文書を一万回書き直していた——ので 64 パートごとにまとめました。それは本物のバグで正しい修正でしたが、再開はやはり 14.5 GB で死にました。本当の原因はハッシュのループにありました。16 進エンコードに <code>String(format:)</code> を使っていて、1 バイトごとに Objective-C の文字列をひとつ確保し、残されたおよそ 127,000 個の一時オブジェクトを誰も回収しなかったのです。欠けているパートだけを読むようにしたことで、その問いは消えました。</p>
+
+    <h2>どう終わるか</h2>
+    <p>最後のパートが上がると、RocketBucket はパート 1 から 9,847 がすべて揃い、サイズの合計がファイルに一致することを確認して、Complete リクエストを送ります。小さなファイルならそこで終わりです。R2 上の 500 GB では、奇妙な 30 秒の始まりです。サーバーはリクエストを受け付け、それから 9,847 片をひとつのオブジェクトに組み立てるのに数十秒かけます。その間、オブジェクトはまだ存在せず、マルチパートアップロードはもう消えています。</p>
+    <p>これを知っているのは、最初の 500 GB の完了が<em>アップロードの完了は不確かです。オブジェクトを手動で確認してください</em>と報告したからです——そしてオブジェクトはそこにあり、完全で、私たちのトークンが付いていました。Complete が曖昧なときに走る照合は「オブジェクトはあるか、私のトークンを持ち、私のサイズか」と 4 秒間隔で 3 回尋ね、毎回「アップロードは消え、オブジェクトは不在」を見て、諦めていました。いまは 6 回——2、4、8、15、15、15 秒——尋ね、消えたアップロードを答えではなく問いとして扱います。成功の定義は動いていません。オブジェクトが応答し、私たちのトークンを持ち、期待どおりのサイズであること。トークンかサイズが違えば、やはり「確信がない」と言います。その代わりは、誰か他人のものかもしれないオブジェクトを名乗ることだからです。</p>
+    <p>レビューは出荷前の再開経路にさらに二つを見つけました。範囲読みが要求したすべてのバイトを返したか確認していなかったこと——サーバーが喜んで受け入れる切り詰められたオブジェクトを完了させ得た——と、速い経路が Complete を直接呼び、上の照合を飛ばしていたこと。どちらも修正済みです。</p>
+
+    <h2>その一回</h2>
+    <p>500 GB のアップロードを始める。止める。終了する。RocketBucket を開き、ファイルをもう一度ドラッグし、再開を選ぶ。サーバー上のパートを採用し、残りをアップロードし、完了し、組み立てを待ち、オブジェクトを確認する。536,870,912,000 バイト、9,847 パート、コミットトークンあり、残されたマルチパートアップロードなし。実行全体でのピークメモリは、およそ 900 MB から 1 GB。</p>
+
+    <hr>
+    <p>これらすべての設計は 5 回レビューされ、正しかった。壊れたのはそのどこにもないものでした。アロケータ、育つジャーナル、間違ったループで確認されていた停止ボタン、そして九千片を貼り合わせるのに 30 秒を要するサーバー。これらはレビューでは見つかりません。500 GB をアップロードし、止め、また始めることで見つかるのです。</p>
+
+    <div class="callout"><strong>現在の状態。</strong>同一セッションとセッションをまたぐ再開は、S3 互換ストレージへのローカルファイルのアップロードについて現在のビルドに入っています。クラウド間の再開（たとえば S3 → R2）はまだソースを読み直します。クラウドのソースにはまだバイト範囲の読み手がないためで、Range 付き GET が次の作業です。</div>
+    <p class="outro">RocketBucket は S3、R2、B2、MinIO のためのデュアルペイン・ファイル転送アプリで、まもなく Mac App Store に登場します。<a href="https://rocketbucket.app/ja/">rocketbucket.app</a></p>
+  </main>
+
+  <footer>
+    © 2026 RocketBucket · <a href="/ja/">rocketbucket.app</a> · <a href="/ja/notes/">開発ノート</a> · <a href="/privacy/">プライバシー</a> · <a href="mailto:tautiu.dev@gmail.com">サポート</a>
+  </footer>
+</body>
+</html>

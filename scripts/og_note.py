@@ -66,5 +66,5 @@ for lang, lines in TITLES.items():
         y += int(hf.size * 1.3)
     sf = fit(d, [SUBS[lang]], path, ri, 30, floor=24)
     d.text((80, y + 30), SUBS[lang], font=sf, fill=(255, 138, 61))
-    out = f"{SLUG_DIR}/og-{lang}.png"
+    out = f"{SLUG_DIR}/og-card.png" if lang == "en" else f"{lang}/{SLUG_DIR}/og-card.png"
     img.save(out); print(out, img.size)

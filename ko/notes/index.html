@@ -1,20 +1,20 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Notes — RocketBucket</title>
-  <meta name="description" content="Development notes from building RocketBucket: what we learned moving very large files to S3 and R2.">
+  <title>개발 노트 — RocketBucket</title>
+  <meta name="description" content="RocketBucket을 만들며 배운 것들을, 아직 생생할 때 적어 둔 기록.">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="RocketBucket Notes">
-  <meta property="og:description" content="Development notes from building RocketBucket: what we learned moving very large files to S3 and R2.">
-  <meta property="og:url" content="https://rocketbucket.app/notes/">
-  <meta property="og:image" content="https://rocketbucket.app/og-card.png">
+  <meta property="og:title" content="RocketBucket 개발 노트">
+  <meta property="og:description" content="RocketBucket을 만들며 배운 것들을, 아직 생생할 때 적어 둔 기록.">
+  <meta property="og:url" content="https://rocketbucket.app/ko/notes/">
+  <meta property="og:image" content="https://rocketbucket.app/og-card-ko.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:site_name" content="RocketBucket">
-  <meta property="og:locale" content="en_US">
-  <link rel="canonical" href="https://rocketbucket.app/notes/">
+  <meta property="og:locale" content="ko_KR">
+  <link rel="canonical" href="https://rocketbucket.app/ko/notes/">
   <link rel="alternate" hreflang="en" href="https://rocketbucket.app/notes/">
   <link rel="alternate" hreflang="zh-Hant" href="https://rocketbucket.app/zh/notes/">
   <link rel="alternate" hreflang="ja" href="https://rocketbucket.app/ja/notes/">
@@ -41,22 +41,22 @@
 </head>
 <body>
   <nav>
-    <a class="brand" href="/"><img src="/icon.png" alt="" width="28" height="28">RocketBucket</a>
-    <div class="lang-switch" aria-label="Language"><a href="/notes/" aria-current="page">EN</a><a href="/zh/notes/">中文</a><a href="/ja/notes/">日本語</a><a href="/ko/notes/">한국어</a></div>
+    <a class="brand" href="/ko/"><img src="/icon.png" alt="" width="28" height="28">RocketBucket</a>
+    <div class="lang-switch" aria-label="Language"><a href="/notes/">EN</a><a href="/zh/notes/">中文</a><a href="/ja/notes/">日本語</a><a href="/ko/notes/" aria-current="page">한국어</a></div>
   </nav>
 
   <main>
-    <h1>Notes</h1>
-    <p class="intro">What we learned building RocketBucket, written down while it was still fresh.</p>
-    <a class="note" href="/notes/500-gb-not-sure/">
-      <div class="when">September 8, 2026</div>
-      <h2>500 GB to R2: what happens when a huge upload stops, and when it starts again</h2>
-      <p>Multipart upload and resume in RocketBucket: 9,847 parts, a journal that outlives the app, zero re-reads on resume, and a completion proof that waits for R2 to assemble. Peak memory about 900 MB to 1 GB.</p>
+    <h1>개발 노트</h1>
+    <p class="intro">RocketBucket을 만들며 배운 것들을, 아직 생생할 때 적어 둔 기록.</p>
+    <a class="note" href="/ko/notes/500-gb-not-sure/">
+      <div class="when">2026년 9월 8일</div>
+      <h2>500 GB를 R2로: 거대한 업로드가 멈출 때, 그리고 다시 시작할 때 일어나는 일</h2>
+      <p>RocketBucket의 멀티파트 업로드와 이어올리기: 9,847개 파트, 앱보다 오래 사는 저널, 이어올리기 시 재읽기 0회, 그리고 R2의 조립을 기다리는 완료 증명. 최대 메모리 약 900 MB~1 GB.</p>
     </a>
   </main>
 
   <footer>
-    © 2026 RocketBucket · <a href="/">rocketbucket.app</a> · <a href="/notes/">Notes</a> · <a href="/privacy/">Privacy</a> · <a href="mailto:tautiu.dev@gmail.com">Support</a>
+    © 2026 RocketBucket · <a href="/ko/">rocketbucket.app</a> · <a href="/ko/notes/">개발 노트</a> · <a href="/privacy/">개인정보 처리방침</a> · <a href="mailto:tautiu.dev@gmail.com">지원</a>
   </footer>
 </body>
 </html>

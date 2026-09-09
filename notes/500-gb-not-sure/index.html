@@ -5,20 +5,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>500 GB to R2: what happens when a huge upload stops, and when it starts again — RocketBucket Notes</title>
   <meta name="description" content="How RocketBucket uploads a 500 GB file to S3 or R2 in 9,847 parts, what it keeps when the upload stops, how it resumes without re-reading what is already on the server, and how it proves the object is complete. Peak memory for the whole run: about 900 MB to 1 GB.">
-  <meta property="og:title" content="500 GB to R2: what happens when a huge upload stops, and when it starts again">
-  <meta property="og:description" content="Multipart upload and resume in RocketBucket: 9,847 parts, a journal that outlives the app, zero re-reads on resume, and a completion proof that waits for R2 to assemble. Peak memory ~900 MB–1 GB.">
   <meta property="og:type" content="article">
-  <meta property="og:image" content="https://rocketbucket.app/notes/500-gb-not-sure/og-en.png">
+  <meta property="og:title" content="500 GB to R2: what happens when a huge upload stops, and when it starts again">
+  <meta property="og:description" content="How RocketBucket uploads a 500 GB file to S3 or R2 in 9,847 parts, what it keeps when the upload stops, how it resumes without re-reading what is already on the server, and how it proves the object is complete. Peak memory for the whole run: about 900 MB to 1 GB.">
+  <meta property="og:url" content="https://rocketbucket.app/notes/500-gb-not-sure/">
+  <meta property="og:image" content="https://rocketbucket.app/notes/500-gb-not-sure/og-card.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta name="twitter:image" content="https://rocketbucket.app/notes/500-gb-not-sure/og-en.png">
-  <meta property="og:url" content="https://rocketbucket.app/notes/500-gb-not-sure/">
-  <meta name="twitter:card" content="summary_large_image">
+  <meta property="og:image:type" content="image/png">
   <meta property="og:site_name" content="RocketBucket">
   <meta property="og:locale" content="en_US">
+  <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="500 GB to R2: what happens when a huge upload stops, and when it starts again">
-  <meta name="twitter:description" content="We uploaded 500 GB to Cloudflare R2, stopped it, and resumed it. It finished — 9,847 parts, peak memory about 900 MB to 1 GB. Here is what happens underneath.">
+  <meta name="twitter:description" content="How RocketBucket uploads a 500 GB file to S3 or R2 in 9,847 parts, what it keeps when the upload stops, how it resumes without re-reading what is already on the server, and how it proves the object is complete. Peak memory for the whole run: about 900 MB to 1 GB.">
+  <meta name="twitter:image" content="https://rocketbucket.app/notes/500-gb-not-sure/og-card.png">
   <link rel="canonical" href="https://rocketbucket.app/notes/500-gb-not-sure/">
+  <link rel="alternate" hreflang="en" href="https://rocketbucket.app/notes/500-gb-not-sure/">
+  <link rel="alternate" hreflang="zh-Hant" href="https://rocketbucket.app/zh/notes/500-gb-not-sure/">
+  <link rel="alternate" hreflang="ja" href="https://rocketbucket.app/ja/notes/500-gb-not-sure/">
+  <link rel="alternate" hreflang="ko" href="https://rocketbucket.app/ko/notes/500-gb-not-sure/">
+  <link rel="alternate" hreflang="x-default" href="https://rocketbucket.app/notes/500-gb-not-sure/">
   <link rel="icon" type="image/png" href="/icon.png">
   <link rel="apple-touch-icon" href="/icon.png">
   <style>
@@ -69,12 +75,12 @@
       padding: 0.22rem; border-radius: 999px;
       background: var(--card); border: 1px solid var(--border);
     }
-    .lang-switch button {
+    .lang-switch a, .lang-switch button {
       font: inherit; font-size: 0.85rem; font-weight: 600; color: var(--muted);
-      background: none; border: 0; cursor: pointer;
+      background: none; border: 0; cursor: pointer; text-decoration: none;
       padding: 0.3rem 0.75rem; border-radius: 999px;
     }
-    .lang-switch button[aria-selected="true"] {
+    .lang-switch a[aria-current="page"], .lang-switch button[aria-selected="true"] {
       background: var(--bg); color: var(--ink);
       box-shadow: 0 1px 3px rgba(34, 38, 46, 0.14);
     }
@@ -128,20 +134,20 @@
     }
     footer a { color: var(--orange-deep); text-decoration: none; margin: 0 0.4rem; }
   </style>
+  <script>
+    (function () {
+      var l = new URLSearchParams(location.search).get("lang");
+      if (l === "zh" || l === "ja" || l === "ko") location.replace("/" + l + "/notes/500-gb-not-sure/");
+    })();
+  </script>
 </head>
 <body>
   <nav>
     <a class="brand" href="/"><img src="/icon.png" alt="" width="28" height="28">RocketBucket</a>
-    <div class="lang-switch" role="tablist" aria-label="Language">
-      <button type="button" role="tab" data-lang-tab="en" aria-selected="true">EN</button>
-      <button type="button" role="tab" data-lang-tab="zh" aria-selected="false">中文</button>
-      <button type="button" role="tab" data-lang-tab="ja" aria-selected="false">日本語</button>
-      <button type="button" role="tab" data-lang-tab="ko" aria-selected="false">한국어</button>
-    </div>
+    <div class="lang-switch" aria-label="Language"><a href="/notes/500-gb-not-sure/" aria-current="page">EN</a><a href="/zh/notes/500-gb-not-sure/">中文</a><a href="/ja/notes/500-gb-not-sure/">日本語</a><a href="/ko/notes/500-gb-not-sure/">한국어</a></div>
   </nav>
 
-  <!-- ============================== EN ============================== -->
-  <main data-lang-page="en">
+  <main>
     <a class="back" href="/notes/">← Notes</a>
     <h1>500 GB to R2: what happens when a huge upload stops, and when it starts again</h1>
     <p class="byline">September 8, 2026 · Multipart uploads and resume in RocketBucket</p>
@@ -187,209 +193,8 @@
     <p class="outro">RocketBucket is a dual-pane file transfer app for S3, R2, B2 and MinIO, coming to the Mac App Store. <a href="https://rocketbucket.app/">rocketbucket.app</a></p>
   </main>
 
-  <!-- ============================== ZH ============================== -->
-  <main data-lang-page="zh" hidden>
-    <a class="back" href="/notes/">← 開發筆記</a>
-    <h1>500 GB 傳上 R2：大檔案中斷時發生什麼事，再接著傳時又發生什麼事</h1>
-    <p class="byline">2026 年 9 月 8 日 · RocketBucket 的分段上傳與續傳</p>
-    <div class="tldr">
-      <div class="label">TL;DR</div>
-      <ul>
-        <li><b>超大檔案：</b>用 S3 分段上傳、串流讀取，從不整個載入記憶體。500 GB 就是 9,847 段、每段 52 MiB、同時傳五段。已對 Cloudflare R2 完整實測。</li>
-        <li><b>中斷了：</b>什麼都不會丟。已上傳的分段留在 server 上，磁碟上的 journal 逐段記錄。續傳——就算已經關掉 App——會先確認是同一個檔案，直接採用那些分段而不重讀，只補缺少的。</li>
-        <li><b>孤兒 chunks：</b>未完成的上傳會顯示在 bucket 裡讓你刪除；刪之前是持續計費的。RocketBucket 絕不自動 abort，因為那可能是別的 client 的。</li>
-        <li><b>記憶體：</b>整趟 500 GB（含續傳）峰值約 900 MB 到 1 GB。所有分段都已在 server 上時，續傳的峰值只有 49.1 MB——因為什麼都不用讀。</li>
-      </ul>
-    </div>
-
-    <p class="lede">我們用 RocketBucket 把一個 500 GB 的檔案傳上 Cloudflare R2，中途停下，再接著傳。它完成了——536,870,912,000 個位元組，9,847 個分段。整趟我們一直盯著記憶體，從第一段到物件組裝完成，最高沒有超過大約 900 MB 到 1 GB。這篇講的是底下發生的事，以及在這句話成立之前我們得先修掉什麼。</p>
-
-    <h2>對 S3 來說，500 GB 長什麼樣</h2>
-    <p>S3 和所有說 S3 協議的服務，都不會用一個請求收下一個大檔案。它收的是分段：最多 10,000 段，每段介於 5 MiB 到 5 GiB，最後再用一個呼叫把它們黏成一個物件。RocketBucket 預設一段 8 MiB，但 500 GB 除以 8 MiB 是 64,000 段，所以上傳開始前它反過來算：500 GB ÷ 10,000，進位到整數 MiB，是 52 MiB。這個決定是永久的。第一段上了 server 之後分段大小就不能改，續傳時必須在一模一樣的位置切開檔案，否則什麼都對不上。</p>
-    <p>同時有五段在傳。檔案是串流讀取、不是整個載入，所以一次傳輸需要的記憶體大約是五段加一個緩衝——約 300 MB——再加上網路程式庫自己的複本。我們量到的 900 MB 到 1 GB 就是這個範圍。</p>
-    <p>上傳進行中會寫兩樣東西，兩樣都只為了中斷那一刻而存在。物件在建立時就被蓋上一個隨機的 commit token，放在 metadata 裡。磁碟上一個小小的 journal 則每段記一行——編號、大小、以及我們自己算的這段位元組的 SHA-256——而且只在 server <em>接受</em>那一段之後才寫。我們自己算 hash 而不信 server 的 ETag，是因為在 SSE-KMS 之下 ETag 不是該段的 MD5，之後會沒東西可比。</p>
-
-    <h2>中斷時發生什麼事</h2>
-    <p>上傳會停下有兩個原因：連線斷了，或你按了停止。第二個附帶一個自白。直到這週為止，在單一大檔案傳輸中按停止是沒有作用的。取消旗標只在檔案之間檢查，而一個 9,847 段的檔案是一個檔案。修好了——取消現在會進到分段上傳裡面，在正在傳的那幾段之內生效——而它被發現的方式跟這篇大部分的事一樣：實際跑一次 10 GB 的續傳，然後按那顆按鈕。</p>
-    <p>不管哪種原因，規則相同：全部保留。journal 寫回磁碟，server 上的分段上傳<strong>不</strong> abort。已經上去的 6,000 段留在那裡，掛在它們的 upload ID 底下等著。等待期間是要計費的——每個 S3 相容的儲存都會對未完成上傳的分段收費，而且它們在一般列表裡看不見——所以 RocketBucket 會顯示 bucket 裡未完成的上傳，讓你刪。但它絕不自己 abort 任何一個。那可能不是它建立的；可能屬於別的 client。</p>
-
-    <h2>再接著傳時發生什麼事</h2>
-    <p>你把同一個檔案拖到同一個地方。在 RocketBucket 讀它任何一個位元組之前，它會先列出 server 上這個 key 的未完成上傳，跟 journal 比對。不算 hash、不讀磁碟——便宜到可以在問你任何事之前先做。然後它問你：續傳這一個、從頭來（只 abort 你選的那個上傳）、還是取消。</p>
-    <p>選了續傳，第一個檢查是這還是不是同一個檔案。同樣的大小、同樣的修改時間、同樣的 inode——所以一個被換成另一個大小完全相同的檔案會在這裡被擋下，journal 不會被採信。接著 server 的分段清單必須跟 journal 一致：我們記錄過的每一段都要在，ETag 和大小都要跟記錄相符。到這時那些分段才會被採用。</p>
-    <p>被採用的分段不會再讀一次。RocketBucket 跳過它們，只依位元組範圍讀缺少的那些段，每段算 hash 寫進 journal，然後上傳。一次每段都已經在 server 上的續傳，從磁碟讀零個位元組、送出零次上傳；有一個 10,000 段的測試就恰恰斷言這件事。</p>
-    <p>第一版不是這樣做的，而第一版就是我們學到 500 GB 是什麼意思的方式。它為了在跳過之前驗證每一段，從第 0 個位元組讀整個檔案、把每一段都算一遍 hash——包括已經上傳的 9,800 段——在一個從不暫停的迴圈裡。記憶體爬到 14.5 GB，macOS 把它殺了。我們先懷疑 journal——它每段都把整份檔案重寫一次，一份越寫越大的文件重寫一萬次——把它改成每 64 段批次寫。那是真的 bug、也是正確的修法，而續傳還是死在 14.5 GB。真正的原因在算 hash 的迴圈裡：十六進位轉換用了 <code>String(format:)</code>，每個位元組配置一個 Objective-C 字串，它留下的大約 127,000 個暫存物件沒有任何東西去回收。改成只讀缺少的分段之後，這個問題就不存在了。</p>
-
-    <h2>它怎麼完成</h2>
-    <p>最後一段上去之後，RocketBucket 檢查第 1 到第 9,847 段全部在場、大小加起來等於檔案，然後送出 Complete 請求。小檔案到這裡就結束了。500 GB 在 R2 上，這是一段奇怪的半分鐘的開始：server 回應了請求，然後花幾十秒把 9,847 片組裝成一個物件。在那段時間裡，物件還不存在，而分段上傳已經不見了。</p>
-    <p>我們知道這件事，是因為第一次 500 GB 完成時回報了<em>上傳的完成狀態不確定，請手動確認物件</em>——而物件就在那裡，完整，上面有我們的 token。Complete 結果模糊時跑的核對邏輯問了「物件在嗎？帶著我的 token、是我的大小嗎？」三次、間隔四秒，每次都看到「上傳不見了、物件不在」，然後放棄。現在它問六次——2、4、8、15、15、15 秒——並且把消失的上傳當成一個問題，而不是一個答案。成功的定義沒有動：物件必須回應、帶著我們的 token、大小完全等於預期。token 或大小不對，我們仍然說不確定，因為另一個選項是認領一個可能屬於別人的物件。</p>
-    <p>Review 在續傳路徑出貨前還找到兩件事：範圍讀取沒有檢查是否真的回傳了要求的每個位元組，這可能會完成一個被截斷的物件、而 server 會欣然接受；還有快速路徑直接呼叫 Complete，繞過了上面的核對。兩個都修了。</p>
-
-    <h2>這一趟</h2>
-    <p>開始傳 500 GB。停下。關掉 App。打開 RocketBucket，再拖一次檔案，選續傳。它採用 server 上的分段，上傳剩下的，送出 Complete，等組裝完成，確認物件：536,870,912,000 個位元組、9,847 段、commit token 在、沒有殘留的分段上傳。整趟的記憶體峰值，大約 900 MB 到 1 GB。</p>
-
-    <hr>
-    <p>這一切的設計 review 了五輪，而且是對的。壞掉的地方全都不在設計裡：一個配置器、一份會長大的 journal、一顆在錯的迴圈裡檢查的停止按鈕、一台需要半分鐘把九千片黏起來的 server。這些不是 review 能找到的。是把 500 GB 傳上去、停下、再接著傳才找到的。</p>
-
-    <div class="callout"><strong>目前狀態。</strong>同一 session 與跨 session 的續傳都在現在的版本裡，適用於本機檔案上傳到 S3 相容儲存。雲到雲的續傳（比如 S3 → R2）目前仍會重新讀取來源，因為雲端來源還沒有依範圍讀取的機制；帶 Range 的 GET 是下一項工作。</div>
-    <p class="outro">RocketBucket 是給 S3、R2、B2 與 MinIO 的雙欄檔案傳輸工具，即將上架 Mac App Store。<a href="https://rocketbucket.app/zh/">rocketbucket.app</a></p>
-  </main>
-
-  <!-- ============================== JA ============================== -->
-  <main data-lang-page="ja" hidden>
-    <a class="back" href="/notes/">← 開発ノート</a>
-    <h1>500 GB を R2 へ：巨大なアップロードが止まったとき、そしてまた始めたときに起きること</h1>
-    <p class="byline">2026 年 9 月 8 日 · RocketBucket のマルチパートアップロードと再開</p>
-    <div class="tldr">
-      <div class="label">TL;DR</div>
-      <ul>
-        <li><b>巨大ファイル：</b>S3 マルチパートでストリーミングアップロード。メモリに丸ごと載せることはありません。500 GB なら 52 MiB × 9,847 パート、同時 5 パート。Cloudflare R2 で最後まで実測済み。</li>
-        <li><b>中断したら：</b>何も失われません。送信済みパートはサーバーに残り、ディスク上のジャーナルが一つずつ記録します。再開は——アプリを終了した後でも——同じファイルであることを確認し、それらのパートを読み直さずに引き継ぎ、欠けている分だけを送ります。</li>
-        <li><b>孤児パート：</b>未完了アップロードはバケット内に表示され、削除できます。削除するまで課金されます。RocketBucket が自動で中止することはありません。別のクライアントのものかもしれないからです。</li>
-        <li><b>メモリ：</b>再開を含む 500 GB の全行程でピーク約 900 MB〜1 GB。全パートがすでにサーバーにある再開はピーク 49.1 MB——何も読まないからです。</li>
-      </ul>
-    </div>
-
-    <p class="lede">RocketBucket で 500 GB のファイルを Cloudflare R2 にアップロードし、途中で止め、もう一度始めました。完了しました——536,870,912,000 バイト、9,847 パート。最初のパートから組み立てられたオブジェクトまで、実行中ずっとメモリを見ていましたが、およそ 900 MB から 1 GB を超えることはありませんでした。その下で何が起きているのか、そしてこの文が真になる前に何を直さなければならなかったのか、という話です。</p>
-
-    <h2>S3 にとって 500 GB とはどう見えるか</h2>
-    <p>S3 と、その API を話すすべてのサービスは、大きなファイルをひとつのリクエストでは受け取りません。受け取るのはパートです。最大 10,000 個、各パートは 5 MiB から 5 GiB、そして最後にそれらをひとつのオブジェクトに貼り合わせる呼び出しが一回。RocketBucket のデフォルトのパートは 8 MiB ですが、500 GB を 8 MiB で割ると 64,000 パートになるので、アップロード開始前に逆向きに計算します。500 GB ÷ 10,000、MiB 単位に切り上げて 52 MiB。この決定は永久です。最初のパートがサーバーに載ったあとでパートサイズは変えられず、再開はファイルをまったく同じ位置で切らなければ何も揃いません。</p>
-    <p>同時に飛んでいるのは 5 パート。ファイルはストリームで読まれ、丸ごと読み込まれることはないので、転送に必要なメモリはおよそ 5 パート＋バッファひとつ——約 300 MB——に、ネットワークライブラリ自身のコピーが乗ったものです。私たちが測った 900 MB から 1 GB はその範囲です。</p>
-    <p>アップロード中に書かれるものが二つあり、どちらも止まる瞬間のためだけに存在します。オブジェクトは作成時にランダムなコミットトークンをメタデータに刻まれます。そしてディスク上の小さなジャーナルにパートごとに一行——番号、サイズ、そのバイト列の私たち自身の SHA-256——が、サーバーがそのパートを<em>受け入れたあと</em>にだけ書かれます。サーバーの ETag を信じずに自分でハッシュするのは、SSE-KMS の下では ETag がパートの MD5 ではなく、あとで比較する相手がなくなるからです。</p>
-
-    <h2>止まったときに起きること</h2>
-    <p>アップロードが止まる理由は二つ。接続が切れるか、あなたが停止を押すか。二つ目には告白が付いています。今週まで、大きな一つのファイルの途中で停止を押しても何も起きませんでした。キャンセルフラグはファイルとファイルの間でしか確認されず、9,847 パートのファイルはひとつのファイルです。修正済みです——キャンセルはいまパートのアップロードの中まで届き、飛んでいるパートのうちに効きます——そして見つかった経緯はこの話の大半と同じで、実際に 10 GB の再開を走らせてボタンを押したことでした。</p>
-    <p>どちらの場合も同じルールが適用されます。すべてを残す。ジャーナルはディスクに書き出され、サーバー上のマルチパートアップロードは中止<strong>されません</strong>。届いた 6,000 パートはアップロード ID の下に留まり、待ちます。待っている間は課金されます——S3 互換のストアはどれも未完了アップロードのパートに課金し、通常のリストには見えません——だから RocketBucket はバケットの未完了アップロードを表示し、削除できるようにしています。しかし自分から中止することは決してありません。自分が作ったものではないかもしれず、別のクライアントのものかもしれないからです。</p>
-
-    <h2>また始めたときに起きること</h2>
-    <p>同じファイルを同じ場所にドラッグします。RocketBucket はその 1 バイトも読む前に、そのキーの未完了アップロードをサーバーに列挙させ、ジャーナルと照合します。ハッシュもディスク読みもなし——何かを尋ねる前にやれるほど安いのです。それから尋ねます。これを再開するか、やり直すか（選んだアップロードだけを中止）、キャンセルするか。</p>
-    <p>再開を選ぶと、最初の確認は「これはまだ同じファイルか」。同じサイズ、同じ更新日時、同じ inode——だからまったく同じサイズの別ファイルに置き換えられたものはここで弾かれ、ジャーナルは信用されません。次にサーバーのパート一覧がジャーナルと一致しなければなりません。記録したすべてのパートが、記録した ETag とサイズで存在すること。そのときはじめて、それらのパートは採用されます。</p>
-    <p>採用されたパートは二度と読まれません。RocketBucket はそれらを飛び越え、欠けているパートだけをバイト範囲で読み、それぞれをハッシュしてジャーナルに書き、アップロードします。すべてのパートがすでにサーバーにある再開は、ディスクから 0 バイトを読み、0 回のアップロードを送ります。10,000 パートでまさにそれを断言するテストがあります。</p>
-    <p>最初の版はそうではなく、そしてその最初の版が、500 GB が何を意味するかを私たちに教えました。それはスキップの前に各パートを検証するため、ファイルを 0 バイト目から読み、すでにアップロード済みの 9,800 パートも含めてすべてのパートをハッシュしていました。一度も止まらないループの中で。メモリは 14.5 GB まで登り、macOS がそれを殺しました。最初に疑ったのはジャーナルでした——パートごとにファイル全体を書き直し、育ち続ける文書を一万回書き直していた——ので 64 パートごとにまとめました。それは本物のバグで正しい修正でしたが、再開はやはり 14.5 GB で死にました。本当の原因はハッシュのループにありました。16 進エンコードに <code>String(format:)</code> を使っていて、1 バイトごとに Objective-C の文字列をひとつ確保し、残されたおよそ 127,000 個の一時オブジェクトを誰も回収しなかったのです。欠けているパートだけを読むようにしたことで、その問いは消えました。</p>
-
-    <h2>どう終わるか</h2>
-    <p>最後のパートが上がると、RocketBucket はパート 1 から 9,847 がすべて揃い、サイズの合計がファイルに一致することを確認して、Complete リクエストを送ります。小さなファイルならそこで終わりです。R2 上の 500 GB では、奇妙な 30 秒の始まりです。サーバーはリクエストを受け付け、それから 9,847 片をひとつのオブジェクトに組み立てるのに数十秒かけます。その間、オブジェクトはまだ存在せず、マルチパートアップロードはもう消えています。</p>
-    <p>これを知っているのは、最初の 500 GB の完了が<em>アップロードの完了は不確かです。オブジェクトを手動で確認してください</em>と報告したからです——そしてオブジェクトはそこにあり、完全で、私たちのトークンが付いていました。Complete が曖昧なときに走る照合は「オブジェクトはあるか、私のトークンを持ち、私のサイズか」と 4 秒間隔で 3 回尋ね、毎回「アップロードは消え、オブジェクトは不在」を見て、諦めていました。いまは 6 回——2、4、8、15、15、15 秒——尋ね、消えたアップロードを答えではなく問いとして扱います。成功の定義は動いていません。オブジェクトが応答し、私たちのトークンを持ち、期待どおりのサイズであること。トークンかサイズが違えば、やはり「確信がない」と言います。その代わりは、誰か他人のものかもしれないオブジェクトを名乗ることだからです。</p>
-    <p>レビューは出荷前の再開経路にさらに二つを見つけました。範囲読みが要求したすべてのバイトを返したか確認していなかったこと——サーバーが喜んで受け入れる切り詰められたオブジェクトを完了させ得た——と、速い経路が Complete を直接呼び、上の照合を飛ばしていたこと。どちらも修正済みです。</p>
-
-    <h2>その一回</h2>
-    <p>500 GB のアップロードを始める。止める。終了する。RocketBucket を開き、ファイルをもう一度ドラッグし、再開を選ぶ。サーバー上のパートを採用し、残りをアップロードし、完了し、組み立てを待ち、オブジェクトを確認する。536,870,912,000 バイト、9,847 パート、コミットトークンあり、残されたマルチパートアップロードなし。実行全体でのピークメモリは、およそ 900 MB から 1 GB。</p>
-
-    <hr>
-    <p>これらすべての設計は 5 回レビューされ、正しかった。壊れたのはそのどこにもないものでした。アロケータ、育つジャーナル、間違ったループで確認されていた停止ボタン、そして九千片を貼り合わせるのに 30 秒を要するサーバー。これらはレビューでは見つかりません。500 GB をアップロードし、止め、また始めることで見つかるのです。</p>
-
-    <div class="callout"><strong>現在の状態。</strong>同一セッションとセッションをまたぐ再開は、S3 互換ストレージへのローカルファイルのアップロードについて現在のビルドに入っています。クラウド間の再開（たとえば S3 → R2）はまだソースを読み直します。クラウドのソースにはまだバイト範囲の読み手がないためで、Range 付き GET が次の作業です。</div>
-    <p class="outro">RocketBucket は S3、R2、B2、MinIO のためのデュアルペイン・ファイル転送アプリで、まもなく Mac App Store に登場します。<a href="https://rocketbucket.app/ja/">rocketbucket.app</a></p>
-  </main>
-
-  <!-- ============================== KO ============================== -->
-  <main data-lang-page="ko" hidden>
-    <a class="back" href="/notes/">← 개발 노트</a>
-    <h1>500 GB를 R2로: 거대한 업로드가 멈출 때, 그리고 다시 시작할 때 일어나는 일</h1>
-    <p class="byline">2026년 9월 8일 · RocketBucket의 멀티파트 업로드와 이어올리기</p>
-    <div class="tldr">
-      <div class="label">TL;DR</div>
-      <ul>
-        <li><b>초대용량 파일:</b> S3 멀티파트로 스트리밍 업로드하며, 메모리에 통째로 올리지 않습니다. 500 GB라면 52 MiB × 9,847개 파트, 동시 5개. Cloudflare R2에서 끝까지 실측했습니다.</li>
-        <li><b>중단되면:</b> 아무것도 잃지 않습니다. 이미 올라간 파트는 서버에 남고, 디스크의 저널이 하나씩 기록합니다. 이어올리기는 — 앱을 종료한 뒤에도 — 같은 파일인지 확인하고, 그 파트들을 다시 읽지 않고 이어받아 빠진 것만 올립니다.</li>
-        <li><b>고아 파트:</b> 미완료 업로드는 버킷에 표시되고 삭제할 수 있습니다. 삭제하기 전까지 과금됩니다. RocketBucket은 절대 자동으로 중단하지 않습니다. 다른 클라이언트의 것일 수 있으니까요.</li>
-        <li><b>메모리:</b> 이어올리기를 포함한 500 GB 전체 실행에서 최대 약 900 MB~1 GB. 모든 파트가 이미 서버에 있는 이어올리기는 최대 49.1 MB — 아무것도 읽지 않기 때문입니다.</li>
-      </ul>
-    </div>
-
-    <p class="lede">RocketBucket으로 500 GB 파일을 Cloudflare R2에 올리다가 중간에 멈추고, 다시 시작했습니다. 끝났습니다 — 536,870,912,000바이트, 9,847개 파트. 첫 파트부터 조립이 끝난 오브젝트까지 실행 내내 메모리를 지켜봤는데, 약 900 MB에서 1 GB를 넘은 적이 없습니다. 그 아래에서 무슨 일이 일어나는지, 그리고 이 문장이 참이 되기 전에 무엇을 고쳐야 했는지에 대한 이야기입니다.</p>
-
-    <h2>S3에게 500 GB는 어떻게 보이는가</h2>
-    <p>S3와 그 API를 말하는 모든 서비스는 큰 파일을 요청 하나로 받지 않습니다. 파트로 받습니다. 최대 10,000개, 각 파트는 5 MiB에서 5 GiB 사이, 그리고 마지막에 그것들을 하나의 오브젝트로 붙이는 호출 한 번. RocketBucket의 기본 파트는 8 MiB지만 500 GB를 8 MiB로 나누면 64,000개 파트가 되므로, 업로드가 시작되기 전에 거꾸로 계산합니다. 500 GB ÷ 10,000, MiB 단위로 올림하면 52 MiB. 이 결정은 영구적입니다. 첫 파트가 서버에 올라간 뒤에는 파트 크기를 바꿀 수 없고, 이어올리기는 파일을 정확히 같은 자리에서 잘라야지 아니면 아무것도 맞지 않습니다.</p>
-    <p>동시에 다섯 파트가 날아갑니다. 파일은 스트리밍으로 읽히고 통째로 적재되지 않으므로, 전송에 필요한 메모리는 대략 다섯 파트 더하기 버퍼 하나 — 약 300 MB — 에 네트워크 라이브러리 자체의 복사본이 얹힌 정도입니다. 우리가 측정한 900 MB~1 GB가 그 범위입니다.</p>
-    <p>업로드가 진행되는 동안 두 가지가 기록되는데, 둘 다 멈추는 순간만을 위해 존재합니다. 오브젝트는 생성 시 메타데이터에 무작위 커밋 토큰이 찍힙니다. 그리고 디스크의 작은 저널에 파트마다 한 줄 — 번호, 크기, 그 바이트의 우리 자신의 SHA-256 — 이 서버가 그 파트를 <em>받아들인 뒤에만</em> 쓰입니다. 서버의 ETag를 믿지 않고 직접 해시하는 이유는, SSE-KMS 아래에서는 ETag가 파트의 MD5가 아니라 나중에 비교할 대상이 없어지기 때문입니다.</p>
-
-    <h2>멈출 때 일어나는 일</h2>
-    <p>업로드가 멈추는 이유는 둘입니다. 연결이 끊기거나, 당신이 중지를 누르거나. 두 번째에는 고백이 붙어 있습니다. 이번 주까지, 큰 파일 하나의 중간에 중지를 눌러도 아무 일도 일어나지 않았습니다. 취소 플래그는 파일과 파일 사이에서만 확인됐고, 9,847개 파트의 파일은 하나의 파일입니다. 고쳤습니다 — 취소는 이제 파트 업로드 안까지 들어가 날아가고 있는 파트들 안에서 효력을 냅니다 — 그리고 발견된 방식은 이 글 대부분과 같습니다. 실제로 10 GB 이어올리기를 돌리고 버튼을 눌러 본 것.</p>
-    <p>어느 경우든 같은 규칙이 적용됩니다. 전부 남긴다. 저널은 디스크에 기록되고, 서버의 멀티파트 업로드는 중단<strong>되지 않습니다</strong>. 도착한 6,000개 파트는 업로드 ID 아래 그대로 남아 기다립니다. 기다리는 동안 과금됩니다 — 모든 S3 호환 스토리지는 미완료 업로드의 파트에 요금을 부과하고, 일반 목록에는 보이지 않습니다 — 그래서 RocketBucket은 버킷의 미완료 업로드를 보여주고 삭제할 수 있게 합니다. 하지만 스스로 중단하는 일은 절대 없습니다. 자기가 만든 것이 아닐 수도, 다른 클라이언트의 것일 수도 있으니까요.</p>
-
-    <h2>다시 시작할 때 일어나는 일</h2>
-    <p>같은 파일을 같은 곳에 끌어다 놓습니다. RocketBucket은 그 파일의 한 바이트도 읽기 전에, 서버에서 그 키의 미완료 업로드를 나열하고 저널과 맞춰 봅니다. 해시도 디스크 읽기도 없이 — 무엇을 묻기 전에 해도 될 만큼 싼 작업입니다. 그런 다음 묻습니다. 이것을 이어갈지, 처음부터 할지(선택한 업로드만 중단), 취소할지.</p>
-    <p>이어가기를 선택하면 첫 확인은 이것이 아직 같은 파일인가입니다. 같은 크기, 같은 수정 시각, 같은 inode — 그래서 정확히 같은 크기의 다른 파일로 바꿔 놓은 것은 여기서 걸리고, 저널은 신뢰되지 않습니다. 다음으로 서버의 파트 목록이 저널과 일치해야 합니다. 우리가 기록한 모든 파트가, 기록한 ETag와 크기로 있어야 합니다. 그때에야 그 파트들이 채택됩니다.</p>
-    <p>채택된 파트는 다시 읽히지 않습니다. RocketBucket은 그것들을 건너뛰고 빠진 파트만 바이트 범위로 읽어, 각각을 해시해 저널에 쓰고 업로드합니다. 모든 파트가 이미 서버에 있는 이어올리기는 디스크에서 0바이트를 읽고 0번 업로드합니다. 10,000개 파트로 정확히 그것을 단언하는 테스트가 있습니다.</p>
-    <p>첫 버전은 그렇게 동작하지 않았고, 그 첫 버전이 500 GB가 무엇을 뜻하는지 우리에게 가르쳐 주었습니다. 건너뛰기 전에 각 파트를 검증하려고 파일을 0바이트부터 읽어 이미 올라간 9,800개까지 포함해 모든 파트를 해시했습니다. 한 번도 멈추지 않는 루프 안에서. 메모리가 14.5 GB까지 올라갔고 macOS가 죽였습니다. 처음엔 저널을 의심했습니다 — 파트마다 파일 전체를 다시 쓰고, 계속 자라는 문서를 만 번 다시 썼으니 — 그래서 64개 파트마다 묶었습니다. 그것은 진짜 버그였고 옳은 수정이었지만, 이어올리기는 여전히 14.5 GB에서 죽었습니다. 진짜 원인은 해시 루프에 있었습니다. 16진 인코딩에 <code>String(format:)</code>을 썼는데, 바이트마다 Objective-C 문자열을 하나씩 할당했고, 그것이 남긴 약 127,000개의 임시 객체를 아무것도 회수하지 않았습니다. 빠진 파트만 읽게 하자 그 질문 자체가 사라졌습니다.</p>
-
-    <h2>어떻게 끝나는가</h2>
-    <p>마지막 파트가 올라가면 RocketBucket은 1번부터 9,847번 파트가 모두 있고 크기 합이 파일과 일치하는지 확인한 뒤 Complete 요청을 보냅니다. 작은 파일이라면 그것으로 끝입니다. R2의 500 GB에서는 기묘한 30초의 시작입니다. 서버는 요청을 받아들이고, 그런 다음 9,847조각을 하나의 오브젝트로 조립하는 데 수십 초를 씁니다. 그 동안 오브젝트는 아직 존재하지 않고, 멀티파트 업로드는 이미 사라져 있습니다.</p>
-    <p>이걸 아는 이유는, 첫 500 GB 완료가 <em>업로드 완료 여부가 불확실합니다. 오브젝트를 직접 확인해 주세요</em>라고 보고했기 때문입니다 — 그런데 오브젝트는 거기 있었고, 완전했고, 우리 토큰이 붙어 있었습니다. Complete가 모호할 때 도는 대조 로직은 "오브젝트가 있는가, 내 토큰을 갖고, 내 크기인가"를 4초 간격으로 세 번 물었고, 매번 "업로드는 사라졌고 오브젝트는 없다"를 보고 포기했습니다. 이제는 여섯 번 — 2, 4, 8, 15, 15, 15초 — 묻고, 사라진 업로드를 답이 아닌 질문으로 다룹니다. 성공의 정의는 움직이지 않았습니다. 오브젝트가 응답하고, 우리 토큰을 갖고, 정확히 기대한 크기여야 합니다. 토큰이나 크기가 다르면 여전히 확신이 없다고 말합니다. 그 대안은 남의 것일지도 모르는 오브젝트를 우리 것이라 주장하는 것이니까요.</p>
-    <p>리뷰는 출시 전 이어올리기 경로에서 두 가지를 더 찾았습니다. 범위 읽기가 요청한 바이트를 모두 돌려줬는지 확인하지 않았다는 것 — 서버가 기꺼이 받아들일 잘린 오브젝트를 완료시킬 수 있었습니다 — 그리고 빠른 경로가 Complete를 직접 호출해 위의 대조를 건너뛰었다는 것. 둘 다 고쳤습니다.</p>
-
-    <h2>그 한 번의 실행</h2>
-    <p>500 GB 업로드를 시작한다. 멈춘다. 앱을 종료한다. RocketBucket을 열고 파일을 다시 끌어다 놓고 이어가기를 선택한다. 서버의 파트를 채택하고, 나머지를 올리고, 완료하고, 조립을 기다리고, 오브젝트를 확인한다. 536,870,912,000바이트, 9,847개 파트, 커밋 토큰 있음, 남은 멀티파트 업로드 없음. 전체 실행의 최대 메모리는 약 900 MB에서 1 GB.</p>
-
-    <hr>
-    <p>이 모든 것의 설계는 다섯 번 리뷰됐고 옳았습니다. 망가진 것은 그 어디에도 없는 것들이었습니다. 할당자, 자라나는 저널, 잘못된 루프에서 확인되던 중지 버튼, 그리고 구천 조각을 붙이는 데 30초가 필요한 서버. 이런 것들은 리뷰로 찾지 못합니다. 500 GB를 올리고, 멈추고, 다시 시작해 봐야 찾습니다.</p>
-
-    <div class="callout"><strong>현재 상태.</strong> 같은 세션과 세션을 넘어서는 이어올리기는 S3 호환 스토리지로의 로컬 파일 업로드에 대해 현재 빌드에 들어 있습니다. 클라우드 간 이어올리기(예: S3 → R2)는 아직 소스를 다시 읽습니다. 클라우드 소스용 바이트 범위 읽기가 아직 없기 때문이며, Range를 붙인 GET이 다음 작업입니다.</div>
-    <p class="outro">RocketBucket은 S3, R2, B2, MinIO를 위한 듀얼 페인 파일 전송 앱이며 곧 Mac App Store에 출시됩니다. <a href="https://rocketbucket.app/ko/">rocketbucket.app</a></p>
-  </main>
-
   <footer>
     © 2026 RocketBucket · <a href="/">rocketbucket.app</a> · <a href="/notes/">Notes</a> · <a href="/privacy/">Privacy</a> · <a href="mailto:tautiu.dev@gmail.com">Support</a>
   </footer>
-
-  <script>
-    (function () {
-      var LANGS = ["en", "zh", "ja", "ko"];
-      var HTML_LANG = { en: "en", zh: "zh-Hant", ja: "ja", ko: "ko" };
-      var TITLES = {
-        en: "500 GB to R2: what happens when a huge upload stops, and when it starts again — RocketBucket Notes",
-        zh: "500 GB 傳上 R2：大檔案中斷時發生什麼事，再接著傳時又發生什麼事 — RocketBucket 開發筆記",
-        ja: "500 GB を R2 へ：巨大なアップロードが止まったとき、そしてまた始めたときに起きること — RocketBucket 開発ノート",
-        ko: "500 GB를 R2로: 거대한 업로드가 멈출 때, 그리고 다시 시작할 때 일어나는 일 — RocketBucket 개발 노트",
-      };
-
-      function setLang(lang, remember) {
-        if (LANGS.indexOf(lang) === -1) lang = "en";
-        document.documentElement.lang = HTML_LANG[lang];
-        document.title = TITLES[lang];
-        document.querySelectorAll("[data-lang-page]").forEach(function (page) {
-          page.hidden = page.getAttribute("data-lang-page") !== lang;
-        });
-        document.querySelectorAll("[data-lang-tab]").forEach(function (tab) {
-          tab.setAttribute("aria-selected", String(tab.getAttribute("data-lang-tab") === lang));
-        });
-        if (remember) {
-          try { localStorage.setItem("rocketbucket-note-lang", lang); } catch (e) {}
-        }
-      }
-
-      document.querySelectorAll("[data-lang-tab]").forEach(function (tab) {
-        tab.addEventListener("click", function () {
-          setLang(tab.getAttribute("data-lang-tab"), true);
-        });
-      });
-
-      var initial = null;
-      var param = new URLSearchParams(location.search).get("lang");
-      if (param && LANGS.indexOf(param) !== -1) initial = param;
-      if (!initial) {
-        try { initial = localStorage.getItem("rocketbucket-note-lang"); } catch (e) {}
-      }
-      if (!initial) {
-        var sitePath = null;
-        try { sitePath = localStorage.getItem("rocketbucket-lang"); } catch (e) {}
-        if (sitePath === "/zh/") initial = "zh";
-        else if (sitePath === "/ja/") initial = "ja";
-        else if (sitePath === "/ko/") initial = "ko";
-        else if (sitePath === "/") initial = "en";
-      }
-      if (!initial) {
-        var langs = navigator.languages && navigator.languages.length
-          ? navigator.languages : [navigator.language || ""];
-        for (var i = 0; i < langs.length && !initial; i++) {
-          if (/^zh/i.test(langs[i])) initial = "zh";
-          else if (/^ja/i.test(langs[i])) initial = "ja";
-          else if (/^ko/i.test(langs[i])) initial = "ko";
-          else if (/^en/i.test(langs[i])) initial = "en";
-        }
-      }
-      setLang(initial || "en", false);
-    })();
-  </script>
 </body>
 </html>
