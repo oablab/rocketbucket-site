@@ -328,3 +328,6 @@ html[lang="ko"] .faq details p { word-break: keep-all; }
 /* ---- Rotating hero headline ---- */
 .hero h1 { transition: opacity 0.5s ease; }
 .hero h1.fade { opacity: 0; }
+.cta-badge { display: inline-flex; align-items: center; transition: transform 0.15s ease; }
+.cta-badge:hover { transform: translateY(-1px); }
+.cta-badge img { height: 48px; width: auto; display: block; }
