@@ -9,7 +9,7 @@
   <meta property="og:title" content="一次一個位元組：下載為什麼比上傳慢 28 倍，一千個小檔又為什麼要排隊">
   <meta property="og:description" content="一千個 100 KB 的檔案上傳從 10.05 秒變成 0.72 秒；1 GiB 下載從 31 秒變成 0.48 秒，因為收到一整塊就處理一整塊，不再一次一個位元組。">
   <meta property="og:url" content="https://rocketbucket.app/zh/notes/one-byte-at-a-time/">
-  <meta property="og:image" content="https://rocketbucket.app/zh/notes/one-byte-at-a-time/og-card.png?v=e354d4f4">
+  <meta property="og:image" content="https://rocketbucket.app/zh/notes/one-byte-at-a-time/og-card.png?v=5c33ec8a">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:type" content="image/png">
@@ -19,10 +19,13 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="一次一個位元組：下載為什麼比上傳慢 28 倍，一千個小檔又為什麼要排隊">
   <meta name="twitter:description" content="一千個 100 KB 的檔案上傳從 10.05 秒變成 0.72 秒；1 GiB 下載從 31 秒變成 0.48 秒，因為收到一整塊就處理一整塊，不再一次一個位元組。">
-  <meta name="twitter:image" content="https://rocketbucket.app/zh/notes/one-byte-at-a-time/og-card.png?v=e354d4f4">
+  <meta name="twitter:image" content="https://rocketbucket.app/zh/notes/one-byte-at-a-time/og-card.png?v=5c33ec8a">
   <link rel="canonical" href="https://rocketbucket.app/zh/notes/one-byte-at-a-time/">
-  <!-- en / ja / ko alternates: add when those translations exist (same pattern as 500-gb-not-sure). -->
+  <link rel="alternate" hreflang="en" href="https://rocketbucket.app/notes/one-byte-at-a-time/">
   <link rel="alternate" hreflang="zh-Hant" href="https://rocketbucket.app/zh/notes/one-byte-at-a-time/">
+  <link rel="alternate" hreflang="ja" href="https://rocketbucket.app/ja/notes/one-byte-at-a-time/">
+  <link rel="alternate" hreflang="ko" href="https://rocketbucket.app/ko/notes/one-byte-at-a-time/">
+  <link rel="alternate" hreflang="x-default" href="https://rocketbucket.app/notes/one-byte-at-a-time/">
   <link rel="icon" type="image/png" href="/icon.png">
   <link rel="apple-touch-icon" href="/icon.png">
   <script>document.documentElement.classList.add('js')</script>
@@ -236,7 +239,7 @@
     @keyframes tmpname { 0%, 76.5% { opacity: 1; } 77.5%, 100% { opacity: 0; } }
     @keyframes finalname { 0%, 76.5% { opacity: 0; } 77.5%, 100% { opacity: 1; } }
     .fig .fdot { fill: var(--orange); opacity: 0; animation: fdot 0.5s linear var(--d) var(--k); }
-    @keyframes fdot { from { transform: translateY(0); opacity: 1; } to { transform: translateY(70px); opacity: 1; } }
+    @keyframes fdot { from { transform: translateY(0); opacity: 1; } to { transform: translateY(90px); opacity: 1; } }
     /* play only while visible; restart on replay; static final frame for reduced motion */
     html.js .fig.anim:not(.go) * { animation-play-state: paused !important; }
     .fig.reset * { animation: none !important; }
@@ -249,13 +252,13 @@
 <body>
   <nav>
     <a class="brand" href="/zh/"><img src="/icon.png" alt="" width="28" height="28">RocketBucket</a>
-    <div class="lang-switch" aria-label="Language"><a href="/notes/">EN</a><a href="/zh/notes/one-byte-at-a-time/" aria-current="page">中文</a><a href="/ja/notes/">日本語</a><a href="/ko/notes/">한국어</a></div>
+    <div class="lang-switch" aria-label="Language"><a href="/notes/one-byte-at-a-time/">EN</a><a href="/zh/notes/one-byte-at-a-time/" aria-current="page">中文</a><a href="/ja/notes/one-byte-at-a-time/">日本語</a><a href="/ko/notes/one-byte-at-a-time/">한국어</a></div>
   </nav>
 
   <main>
     <a class="back" href="/zh/notes/">← 開發筆記</a>
     <h1>一次一個位元組：下載為什麼比上傳慢 28 倍，一千個小檔又為什麼要排隊</h1>
-    <p class="byline">2026 年 11 月 3 日 · RocketBucket 0.3.0</p>
+    <p class="byline">2026 年 11 月 3 日 · RocketBucket 0.3.0（下一個版本）</p>
     <div class="tldr">
       <div class="label">TL;DR</div>
       <ul>
@@ -263,7 +266,7 @@
         <li><b>下載：</b>下載 1 GiB 要 31 秒，上傳同一個檔案只要 1 秒。97% 的 CPU 時間花在一行程式：把收到的資料一次一個位元組地附加上去。改成收到一整塊就處理一整塊之後，1 GiB 下載變成 0.48 秒，5 GiB 從 160 秒變成 7.3 秒。</li>
         <li><b>重試：</b>以前只有大檔案分段上傳會重試，小檔案上傳和所有下載，碰到一次 503 就失敗。現在每個請求都會自己重試，等待時間逐次拉長，也會照 server 給的 <code>Retry-After</code> 等。</li>
         <li><b>一小時：</b>任何一次下載只要超過 60 分鐘，就一定會被切斷。現在不會了。</li>
-        <li>以上數字都是在 M4 Mac mini 上對本機 MinIO 量的。真實網路的倍數會不一樣，但瓶頸本身是真的。</li>
+        <li>以上數字都是在 M4 Mac mini 上對本機 MinIO 量的。真實網路的倍數會不一樣，但瓶頸本身是真的。以上改進將在下一個版本 0.3.0 生效。</li>
       </ul>
     </div>
 
@@ -377,7 +380,7 @@
         </svg>
       </div>
       <button class="replay" type="button" hidden>↻ 重播</button>
-      <figcaption>一千個 100 KB 的檔案上傳。左邊一次一個，每個檔案依序等三次來回；右邊很多個同時傳。計時器照實際時間走，兩條進度條用同一把尺。方塊只是示意。</figcaption>
+      <figcaption>一千個 100 KB 的檔案上傳。「以前」一次一個，每個檔案依序等三次來回；「現在」很多個同時傳。計時器照實際時間走，兩條進度條用同一把尺。方塊只是示意。</figcaption>
     </figure>
 
     <h2>一次一個位元組</h2>
@@ -440,7 +443,7 @@
         </svg>
       </div>
       <button class="replay" type="button" hidden>↻ 重播</button>
-      <figcaption>左邊：資料一次附加一個位元組，CPU 跑滿一個核心。右邊：網路送來一整塊就收一整塊，CPU 幾乎沒事做。user CPU 從 30 秒降到 0.25 秒。</figcaption>
+      <figcaption>以前：資料一次附加一個位元組，CPU 跑滿一個核心。現在：網路送來一整塊就收一整塊，CPU 幾乎沒事做。user CPU 從 30 秒降到 0.25 秒。</figcaption>
     </figure>
 
     <p>修法是改用 delegate，網路送來一整塊資料，我們就一整塊收下。1 GiB 變成 0.48 秒，user CPU 從 30 秒掉到 0.25 秒。5 GiB 從 160 秒變成 7.3 秒；到這個大小，瓶頸已經換成 SSD 和記憶體快取，不再是程式。</p>
@@ -502,10 +505,10 @@
         <rect class="seg" x="170" y="34" width="75" height="26"/>
         <rect class="seg" x="245" y="34" width="75" height="26"/>
         <g class="lanes">
-          <line class="lane" x1="57.5" y1="66" x2="57.5" y2="142"/>
-          <line class="lane" x1="132.5" y1="66" x2="132.5" y2="142"/>
-          <line class="lane" x1="207.5" y1="66" x2="207.5" y2="142"/>
-          <line class="lane" x1="282.5" y1="66" x2="282.5" y2="142"/>
+          <line class="lane" x1="57.5" y1="66" x2="57.5" y2="164"/>
+          <line class="lane" x1="132.5" y1="66" x2="132.5" y2="164"/>
+          <line class="lane" x1="207.5" y1="66" x2="207.5" y2="164"/>
+          <line class="lane" x1="282.5" y1="66" x2="282.5" y2="164"/>
         </g>
         <circle class="fdot" style="--d:.2s;--k:5.6" cx="57.5" cy="70" r="4"/>
         <circle class="fdot" style="--d:.2s;--k:6.8" cx="132.5" cy="70" r="4"/>
@@ -514,10 +517,10 @@
         <circle class="fdot" style="--d:.2s;--k:5.2" cx="282.5" cy="70" r="4"/>
         <rect class="tmp" x="20" y="168" width="300" height="30" rx="4"/>
         <g class="nb">
-          <rect class="fill f1" x="22" y="170" width="73" height="26"/>
-          <rect class="fill f2" x="95" y="170" width="75" height="26"/>
-          <rect class="fill f3" x="170" y="170" width="75" height="26"/>
-          <rect class="fill f4" x="245" y="170" width="73" height="26"/>
+          <rect class="fill f1" x="21" y="169" width="74" height="28"/>
+          <rect class="fill f2" x="95" y="169" width="75" height="28"/>
+          <rect class="fill f3" x="170" y="169" width="75" height="28"/>
+          <rect class="fill f4" x="245" y="169" width="74" height="28"/>
         </g>
         <line class="slot" x1="95" y1="168" x2="95" y2="198"/>
         <line class="slot" x1="170" y1="168" x2="170" y2="198"/>
@@ -529,10 +532,10 @@
           <text class="c sm" x="132.5" y="51">第 2 段</text>
           <text class="c sm" x="207.5" y="51">第 3 段</text>
           <text class="c sm" x="282.5" y="51">第 4 段</text>
-          <text class="tmpname" x="20" y="160">暫存檔（<tspan class="m">pwrite</tspan> 到對應位置）</text>
-          <text class="final" x="20" y="160">全部到齊 → 改名為正式檔名 ✓</text>
-          <text class="c fail" x="207.5" y="218">失敗</text>
-          <text class="c retry" x="207.5" y="218">只重抓這一段</text>
+          <text class="tmpname" x="20" y="218">暫存檔（<tspan class="m">pwrite</tspan> 到對應位置）</text>
+          <text class="final" x="20" y="218">全部到齊 → 改名為正式檔名 ✓</text>
+          <text class="c fail halo" x="207.5" y="158">失敗</text>
+          <text class="c retry halo" x="207.5" y="158">只重抓這一段</text>
         </g>
       </svg>
       <button class="replay" type="button" hidden>↻ 重播</button>
@@ -554,7 +557,7 @@
     <p>Review 也問了一個我們沒想過的問題：一個小檔案在掃描之後、讀取之前變大了，會怎樣？答案是我們會照新的大小整個讀進記憶體，而記憶體額度只按舊的大小預留。</p>
     <p>我們選擇讓它失敗。讀到的內容一超過掃描時的大小，這個檔案這次就停下，錯誤訊息是 <code>Source size changed</code>，跟大檔案一直以來的行為一樣。還在寫入的檔案，這次不會被傳上去；再跑一次就會傳。我們寧可少傳一個寫到一半的檔案，也不要傳上去一個你以為完整的檔案。</p>
 
-    <div class="callout"><strong>目前狀態。</strong>以上都在 0.3.0 裡。雲到雲的傳輸（例如 S3 → R2）目前還是用一個請求讀完整個來源，重試時從頭讀；讓它也改用分段讀取，是下一項工作（<a href="https://github.com/oablab/rocketbucket/issues/15">#15</a>）。同一家服務之間讓雲端自己複製、不經過你的 Mac，也在清單上。</div>
+    <div class="callout"><strong>目前狀態。</strong>以上改進將在下一個版本 0.3.0 生效。雲到雲的傳輸（例如 S3 → R2）目前還是用一個請求讀完整個來源，重試時從頭讀；讓它也改用分段讀取，是下一項工作（<a href="https://github.com/oablab/rocketbucket/issues/15">#15</a>）。同一家服務之間讓雲端自己複製、不經過你的 Mac，也在清單上。</div>
     <p class="outro">RocketBucket 是給 S3、R2、B2 與 MinIO 用的雙欄檔案傳輸工具，<a href="https://apps.apple.com/app/id6810038461">已上架 Mac App Store</a>。<a href="https://rocketbucket.app/zh/">rocketbucket.app</a></p>
   </main>
 

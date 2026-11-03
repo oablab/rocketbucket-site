@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>1 バイトずつ：ダウンロードがアップロードより 28 倍遅かった理由と、千個の小さなファイルが順番待ちしていた理由 — RocketBucket 開発ノート</title>
+  <meta name="description" content="100 KB のファイル 1,000 個のアップロードが 10.05 秒から 0.72 秒に、1 GiB のダウンロードが 31 秒から 0.48 秒になりました。1 バイトずつではなく、届いたかたまりをそのまま処理するようにしたからです。">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="1 バイトずつ：ダウンロードがアップロードより 28 倍遅かった理由と、千個の小さなファイルが順番待ちしていた理由">
+  <meta property="og:description" content="100 KB のファイル 1,000 個のアップロードが 10.05 秒から 0.72 秒に、1 GiB のダウンロードが 31 秒から 0.48 秒になりました。1 バイトずつではなく、届いたかたまりをそのまま処理するようにしたからです。">
+  <meta property="og:url" content="https://rocketbucket.app/ja/notes/one-byte-at-a-time/">
+  <meta property="og:image" content="https://rocketbucket.app/ja/notes/one-byte-at-a-time/og-card.png?v=4b3ab353">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:alt" content="RocketBucket 開発ノート：1 バイトずつ。ダウンロードが 28 倍遅く、千個の小さなファイルが順番待ちしていた理由">
+  <meta property="og:site_name" content="RocketBucket">
+  <meta property="og:locale" content="ja_JP">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="1 バイトずつ：ダウンロードがアップロードより 28 倍遅かった理由と、千個の小さなファイルが順番待ちしていた理由">
+  <meta name="twitter:description" content="100 KB のファイル 1,000 個のアップロードが 10.05 秒から 0.72 秒に、1 GiB のダウンロードが 31 秒から 0.48 秒になりました。1 バイトずつではなく、届いたかたまりをそのまま処理するようにしたからです。">
+  <meta name="twitter:image" content="https://rocketbucket.app/ja/notes/one-byte-at-a-time/og-card.png?v=4b3ab353">
+  <link rel="canonical" href="https://rocketbucket.app/ja/notes/one-byte-at-a-time/">
+  <link rel="alternate" hreflang="en" href="https://rocketbucket.app/notes/one-byte-at-a-time/">
+  <link rel="alternate" hreflang="zh-Hant" href="https://rocketbucket.app/zh/notes/one-byte-at-a-time/">
+  <link rel="alternate" hreflang="ja" href="https://rocketbucket.app/ja/notes/one-byte-at-a-time/">
+  <link rel="alternate" hreflang="ko" href="https://rocketbucket.app/ko/notes/one-byte-at-a-time/">
+  <link rel="alternate" hreflang="x-default" href="https://rocketbucket.app/notes/one-byte-at-a-time/">
+  <link rel="icon" type="image/png" href="/icon.png">
+  <link rel="apple-touch-icon" href="/icon.png">
+  <script>document.documentElement.classList.add('js')</script>
+  <style>
+    :root {
+      --orange: #F2600C;
+      --orange-deep: #B84A08;
+      --orange-tint: #FBE8DA;
+      --ink: #22262E;
+      --muted: #6B7280;
+      --bg: #F7F5F1;
+      --card: #FFFFFF;
+      --border: rgba(34, 38, 46, 0.13);
+      --line: rgba(34, 38, 46, 0.32);
+      --fig-old: #8D95A3;
+      --fig-bad: #C93A2C;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --orange: #FF8A3D;
+        --orange-deep: #FFA05C;
+        --orange-tint: #3A2414;
+        --ink: #ECEDF0;
+        --muted: #9AA3B2;
+        --bg: #12161F;
+        --card: #1B212D;
+        --border: rgba(255, 138, 61, 0.18);
+        --line: rgba(236, 237, 240, 0.3);
+        --fig-old: #6E788B;
+        --fig-bad: #FF6F61;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      line-height: 1.72;
+      -webkit-font-smoothing: antialiased;
+    }
+    html[lang="zh-Hant"] body { font-family: "PingFang TC", "SF Pro TC", -apple-system, BlinkMacSystemFont, "Heiti TC", "Microsoft JhengHei", sans-serif; line-height: 1.8; }
+    html[lang="ja"] body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro JP", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", sans-serif; line-height: 1.8; }
+    html[lang="ko"] body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro KR", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif; line-height: 1.8; word-break: keep-all; }
+    nav {
+      position: sticky; top: 0; z-index: 10;
+      display: flex; align-items: center; justify-content: space-between;
+      max-width: 860px; margin: 0 auto; padding: 0.9rem 1.5rem;
+      backdrop-filter: saturate(180%) blur(16px);
+      gap: 0.75rem; flex-wrap: wrap;
+    }
+    nav .brand { display: flex; align-items: center; gap: 0.55rem; font-weight: 700; font-size: 1.05rem; text-decoration: none; color: var(--ink); }
+    nav .brand img { width: 28px; height: 28px; border-radius: 7px; }
+    .lang-switch {
+      display: inline-flex; gap: 0.25rem;
+      padding: 0.22rem; border-radius: 999px;
+      background: var(--card); border: 1px solid var(--border);
+    }
+    .lang-switch a, .lang-switch button {
+      font: inherit; font-size: 0.85rem; font-weight: 600; color: var(--muted);
+      background: none; border: 0; cursor: pointer; text-decoration: none;
+      padding: 0.3rem 0.75rem; border-radius: 999px;
+    }
+    .lang-switch a[aria-current="page"], .lang-switch button[aria-selected="true"] {
+      background: var(--bg); color: var(--ink);
+      box-shadow: 0 1px 3px rgba(34, 38, 46, 0.14);
+    }
+    main { max-width: 680px; margin: 0 auto; padding: 2.5rem 1.5rem 4rem; }
+    main[hidden] { display: none; }
+    .back { display: inline-block; color: var(--muted); text-decoration: none; font-size: 0.88rem; margin-bottom: 1.6rem; }
+    .back:hover { color: var(--orange-deep); }
+    h1 {
+      font-size: clamp(1.9rem, 4.6vw, 2.5rem);
+      line-height: 1.15; letter-spacing: -0.015em; font-weight: 700;
+    }
+    html[lang="zh-Hant"] h1, html[lang="ja"] h1, html[lang="ko"] h1 { font-weight: 800; letter-spacing: 0; line-height: 1.25; }
+    .byline { color: var(--muted); font-size: 0.9rem; margin-top: 0.7rem; }
+    h2 {
+      font-size: 1.3rem; font-weight: 700; letter-spacing: -0.01em;
+      margin: 2.6rem 0 0.8rem;
+    }
+    p { margin-top: 1rem; font-size: 1.02rem; }
+    .lede { font-size: 1.1rem; }
+    .lede a, main p a { color: var(--orange-deep); }
+    ul { margin-top: 0.8rem; padding-left: 1.3rem; }
+    li { margin-bottom: 0.6rem; }
+    li::marker { color: var(--orange); }
+    strong { color: var(--orange-deep); }
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 0.86em; background: var(--card);
+      border: 1px solid var(--border); border-radius: 5px; padding: 0.08em 0.35em;
+      overflow-wrap: anywhere;
+    }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2.6rem 0 0; }
+    .callout {
+      background: var(--orange-tint); border-radius: 14px;
+      padding: 1.1rem 1.4rem; margin-top: 2.4rem;
+      font-size: 1.02rem;
+    }
+    .callout strong { color: var(--orange-deep); }
+    .callout a { color: var(--orange-deep); }
+    .tldr {
+      background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--orange);
+      border-radius: 14px; padding: 1.1rem 1.4rem 1.2rem; margin-top: 1.8rem; font-size: 0.98rem;
+    }
+    .tldr .label { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--orange-deep); }
+    .tldr ul { margin-top: 0.6rem; padding-left: 1.1rem; }
+    .tldr li { margin-bottom: 0.5rem; }
+    .tldr li:last-child { margin-bottom: 0; }
+    .tldr b { color: var(--ink); font-weight: 700; }
+    .outro { color: var(--muted); font-size: 0.95rem; }
+    .outro a { color: var(--orange-deep); }
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 2.2rem 1.5rem; text-align: center;
+      color: var(--muted); font-size: 0.88rem;
+    }
+    footer a { color: var(--orange-deep); text-decoration: none; margin: 0 0.4rem; }
+
+    /* ---- illustrations ---- */
+    .fig { position: relative; margin: 1.8rem 0 0; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 0.9rem 0.6rem 0.8rem; }
+    .fig svg { display: block; width: 100%; height: auto; margin: 0 auto; }
+    .fig .solo { max-width: 480px; }
+    .fig .pair { display: grid; grid-template-columns: 1fr; gap: 0.9rem; }
+    .fig .pair svg { max-width: 340px; }
+    @media (min-width: 620px) { .fig .pair { grid-template-columns: 1fr 1fr; gap: 0.6rem; } }
+    .fig figcaption { color: var(--muted); font-size: 0.88rem; line-height: 1.65; margin: 0.7rem 0.5rem 0; }
+    .fig .replay {
+      display: block; margin: 0.6rem 0.5rem 0 auto;
+      font: inherit; font-size: 0.8rem; font-weight: 600; color: var(--orange-deep);
+      background: var(--bg); border: 1px solid var(--border); border-radius: 999px;
+      padding: 0.2rem 0.8rem; cursor: pointer;
+    }
+    .fig .replay[hidden] { display: none; }
+    .fig text { fill: var(--ink); font-size: 13px; }
+    .fig .h { font-size: 15px; font-weight: 700; text-anchor: middle; }
+    .fig .s { fill: var(--muted); font-size: 12px; text-anchor: middle; }
+    .fig .c { text-anchor: middle; }
+    .fig .e { text-anchor: end; }
+    .fig .b { font-weight: 700; }
+    .fig .mu { fill: var(--muted); }
+    .fig .m { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+    .fig .sm { font-size: 11px; }
+    .fig .timer { font-size: 24px; font-weight: 800; text-anchor: middle; font-variant-numeric: tabular-nums; }
+    .fig .halo { paint-order: stroke; stroke: var(--card); stroke-width: 4px; stroke-linejoin: round; }
+    .fig .box { fill: var(--bg); stroke: var(--line); }
+    .fig .lane { stroke: var(--line); stroke-dasharray: 3 4; }
+    .fig .ob { fill: var(--fig-old); }
+    .fig .nb { fill: var(--orange); }
+    .fig .track { fill: var(--line); opacity: 0.45; }
+    .fig .gridl { stroke: var(--line); stroke-dasharray: 2 3; }
+    .fig .axis { stroke: var(--muted); }
+    /* fig 1: race */
+    .fig .gone { opacity: 0.16; animation: hold1 var(--d) linear; }
+    .fig .came { animation: hold0 var(--d) linear; }
+    @keyframes hold1 { from, to { opacity: 1; } }
+    @keyframes hold0 { from, to { opacity: 0; } }
+    .fig .dot { opacity: 0; animation: rt var(--t) linear var(--d, 0s) var(--k); }
+    .fig .dot.ob { fill: var(--muted); }
+    @keyframes rt { 0%, 100% { transform: translateX(0); opacity: 1; } 50% { transform: translateX(124px); opacity: 1; } }
+    .fig .pill rect { fill: transparent; stroke: var(--line); animation: lit 1.25625s linear var(--d) 8; }
+    @keyframes lit { 0%, 32% { fill: var(--orange-tint); stroke: var(--orange); } 34%, 100% { fill: transparent; stroke: var(--line); } }
+    .fig .bar { transform-box: fill-box; transform-origin: 0 50%; animation: grow var(--t) linear both; }
+    @keyframes grow { from { transform: scaleX(0); } }
+    /* fig 2: bytes vs chunks */
+    .fig .bucket { fill: none; stroke: var(--ink); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+    .fig .grain { fill: var(--muted); transform: translateY(var(--y)); animation: fall 1.2s linear var(--d) infinite; }
+    @keyframes fall { 0% { transform: translateY(0); opacity: 0; } 8% { opacity: 1; } 100% { transform: translateY(122px); opacity: 1; } }
+    .fig .sand { transform-box: fill-box; transform-origin: 50% 100%; animation: rise 8s linear both; }
+    @keyframes rise { from { transform: scaleY(0); } }
+    .fig .chunk { animation: drop 0.45s cubic-bezier(.5, 0, 1, 1) var(--d) both; }
+    @keyframes drop { 0% { transform: translateY(var(--f)); opacity: 0; } 3% { opacity: 1; } 100% { transform: none; opacity: 1; } }
+    .fig .meter { fill: none; stroke: var(--line); stroke-width: 1.5; }
+    .fig .cpu { transform-box: fill-box; transform-origin: 50% 100%; }
+    .fig .cpu.hot { fill: var(--fig-bad); animation: pin 0.35s ease-in-out infinite alternate; }
+    @keyframes pin { from { transform: scaleY(0.93); } to { transform: scaleY(1); } }
+    .fig .cpu.cool { fill: var(--orange); transform: scaleY(0.06); animation: blip 2.4s linear both; }
+    @keyframes blip {
+      0%, 25% { transform: scaleY(0.04); } 27% { transform: scaleY(0.3); } 33%, 42% { transform: scaleY(0.05); }
+      44% { transform: scaleY(0.3); } 50%, 58% { transform: scaleY(0.05); } 60% { transform: scaleY(0.3); }
+      66%, 75% { transform: scaleY(0.05); } 77% { transform: scaleY(0.3); } 83%, 100% { transform: scaleY(0.06); }
+    }
+    .fig .bad { fill: var(--fig-bad); }
+    /* fig 4: ranged download */
+    .fig .seg { fill: var(--orange-tint); stroke: var(--orange); }
+    .fig .tmp { fill: var(--bg); stroke: var(--orange); stroke-width: 2; animation: tmpline 6.5s linear both; }
+    @keyframes tmpline { 0%, 76.5% { stroke: var(--muted); stroke-dasharray: 6 4; } 77.5%, 100% { stroke: var(--orange); stroke-dasharray: none; } }
+    .fig .slot { stroke: var(--line); }
+    .fig .fill { transform-box: fill-box; transform-origin: 0 50%; }
+    .fig .f1 { animation: f1 6.5s linear both; }
+    .fig .f2 { animation: f2 6.5s linear both; }
+    .fig .f3 { animation: f3 6.5s linear both; }
+    .fig .f4 { animation: f4 6.5s linear both; }
+    @keyframes f1 { 0%, 3.1% { transform: scaleX(0); } 46.2%, 100% { transform: none; } }
+    @keyframes f2 { 0%, 3.1% { transform: scaleX(0); } 55.4%, 100% { transform: none; } }
+    @keyframes f4 { 0%, 3.1% { transform: scaleX(0); } 43.1%, 100% { transform: none; } }
+    @keyframes f3 {
+      0%, 3.1% { transform: scaleX(0); fill: var(--orange); }
+      24.6% { transform: scaleX(0.55); fill: var(--orange); }
+      25.2%, 36.9% { transform: scaleX(0.55); fill: var(--fig-bad); }
+      37.2% { transform: scaleX(0); fill: var(--orange); }
+      70.8%, 100% { transform: none; fill: var(--orange); }
+    }
+    .fig .fail, .fig .retry, .fig .tmpname { opacity: 0; }
+    .fig .fail { fill: var(--fig-bad); font-weight: 700; animation: fail 6.5s linear both; }
+    .fig .retry { fill: var(--orange-deep); font-weight: 700; animation: retry 6.5s linear both; }
+    .fig .tmpname { animation: tmpname 6.5s linear both; }
+    .fig .final { fill: var(--orange-deep); font-weight: 700; animation: finalname 6.5s linear both; }
+    @keyframes fail { 0%, 24.9% { opacity: 0; } 25.2%, 36.9% { opacity: 1; } 37.2%, 100% { opacity: 0; } }
+    @keyframes retry { 0%, 37% { opacity: 0; } 37.3%, 70.8% { opacity: 1; } 71.2%, 100% { opacity: 0; } }
+    @keyframes tmpname { 0%, 76.5% { opacity: 1; } 77.5%, 100% { opacity: 0; } }
+    @keyframes finalname { 0%, 76.5% { opacity: 0; } 77.5%, 100% { opacity: 1; } }
+    .fig .fdot { fill: var(--orange); opacity: 0; animation: fdot 0.5s linear var(--d) var(--k); }
+    @keyframes fdot { from { transform: translateY(0); opacity: 1; } to { transform: translateY(90px); opacity: 1; } }
+    /* play only while visible; restart on replay; static final frame for reduced motion */
+    html.js .fig.anim:not(.go) * { animation-play-state: paused !important; }
+    .fig.reset * { animation: none !important; }
+    @media (prefers-reduced-motion: reduce) {
+      .fig * { animation: none !important; }
+      .fig .replay { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <a class="brand" href="/ja/"><img src="/icon.png" alt="" width="28" height="28">RocketBucket</a>
+    <div class="lang-switch" aria-label="Language"><a href="/notes/one-byte-at-a-time/">EN</a><a href="/zh/notes/one-byte-at-a-time/">中文</a><a href="/ja/notes/one-byte-at-a-time/" aria-current="page">日本語</a><a href="/ko/notes/one-byte-at-a-time/">한국어</a></div>
+  </nav>
+
+  <main>
+    <a class="back" href="/ja/notes/">← 開発ノート</a>
+    <h1>1 バイトずつ：ダウンロードがアップロードより 28 倍遅かった理由と、千個の小さなファイルが順番待ちしていた理由</h1>
+    <p class="byline">2026 年 11 月 3 日 · RocketBucket 0.3.0（次のリリース）</p>
+    <div class="tldr">
+      <div class="label">TL;DR</div>
+      <ul>
+        <li><b>小さなファイル：</b>これまでは 1 ファイルずつ送っていました。いまは多くのファイルを同時に送り、接続数とメモリの上限をひとつ共有します。100 KB のファイル 1,000 個のアップロードは 10.05 秒から 0.72 秒になりました。</li>
+        <li><b>ダウンロード：</b>1 GiB のダウンロードに 31 秒、同じファイルのアップロードは 1 秒でした。CPU 時間の 97% がたった 1 行に使われていました。受け取ったデータを 1 バイトずつ追記する行です。届いたかたまりをそのまま処理するように変えると、1 GiB のダウンロードは 0.48 秒、5 GiB は 160 秒から 7.3 秒になりました。</li>
+        <li><b>リトライ：</b>これまでリトライするのは大きなファイルのマルチパートアップロードだけで、小さなファイルのアップロードとすべてのダウンロードは、503 が一度来れば失敗でした。いまはリクエストごとに自分でリトライし、待ち時間を回ごとに延ばし、サーバーが返す <code>Retry-After</code> にも従います。</li>
+        <li><b>1 時間：</b>60 分を超えるダウンロードは、どれも必ず途中で切られていました。もう切られません。</li>
+        <li>数字はすべて M4 Mac mini 上でローカルの MinIO に対して測ったものです。実際のネットワークでは倍率は変わりますが、ボトルネックそのものは本物です。以上の改善は、次のリリース 0.3.0 で反映されます。</li>
+      </ul>
+    </div>
+
+    <p class="lede"><a href="/ja/notes/500-gb-not-sure/">前回</a>は 500 GB のファイル 1 つの話でした。今回はその反対側、千個の小さなファイルと、クラウドからファイルを取り戻す話です。どちらもごく普通の作業で、どちらも本来の速さより 1 桁以上遅く、しかもどちらも原因はネットワークではありませんでした。</p>
+
+    <h2>千個のファイルを、ひとつずつ</h2>
+    <p>きっかけは、AWS がオープンソースで公開している <a href="https://github.com/awslabs/filemoverexpress">FileMoverExpress</a> を読んだことでした。ファイルの大きさで並列のしかたを切り替えます。大きなファイルは多数のパートに分けて同時に送り、小さなファイルは多数のファイルを同時に送ります。RocketBucket を振り返ると、大きなファイルの半分はできていて、5 パートを同時に送っていました。小さなファイルの半分はまったくありませんでした。転送エンジンは <code>for</code> ループで、1 つのファイルが終わるまで次のファイルを始めませんでした。</p>
+    <p>100 KB のファイルなら、データそのものにはほとんど時間がかかりません。時間はすべて待ちに消えます。まず宛先に「このファイルはある？」と聞き、次に送り元に「サイズは？」と聞き、それからやっとアップロード。往復 3 回を順番に。千個のファイルなら、順番待ちが三千回です。帯域はほとんど空いていました。</p>
+    <p>ループを並列にするだけでは足りず、その下に制限が 2 つありました。macOS の <code>URLSession</code> は、既定では同じホストへの接続を最大 6 本までしか開きません。S3 は HTTP/1.1 なので、並列数を 100 にしても実際に動くのは 6 本です。それに、転送のたびに新しい session を作り、再利用もせず、閉じることもありませんでした。</p>
+    <p>いまは共有の「予算」をひとつ持ち、2 つのことを同時に管理します。同時に飛んでいるリクエストの数と、バッファしているバイトの合計（256 MiB）です。小さなファイルも大きなファイルのパートも同じ予算から枠を取るので、小さなファイルを一度に 1 万個ドラッグしても、大きなファイルを 3 つ同時に送っても、メモリが暴走することはありません。接続数の上限は予算に合わせて引き上げ、同じ bucket・同じ認証情報なら、長く生きる session をひとつ共有します。</p>
+    <p>結果、10.05 秒が 0.72 秒になりました。</p>
+
+    <figure class="fig anim" id="fig-race">
+      <div class="pair">
+        <svg viewBox="0 0 300 230" role="img" aria-labelledby="race-old-t race-old-d">
+          <title id="race-old-t">以前：1 ファイルずつ</title>
+          <desc id="race-old-d">100 KB のファイル 1,000 個を順番にアップロード。ファイルごとに往復 3 回（HEAD、HEAD、PUT）を待ち、合計 10.05 秒。</desc>
+          <rect class="box" x="12" y="50" width="64" height="120" rx="8"/>
+          <rect class="box" x="224" y="50" width="64" height="120" rx="8"/>
+          <g class="ob">
+            <rect class="gone" style="--d:.01s" x="23" y="58" width="18" height="18" rx="3"/>
+            <rect class="gone" style="--d:1.256s" x="47" y="58" width="18" height="18" rx="3"/>
+            <rect class="gone" style="--d:2.513s" x="23" y="84" width="18" height="18" rx="3"/>
+            <rect class="gone" style="--d:3.769s" x="47" y="84" width="18" height="18" rx="3"/>
+            <rect class="gone" style="--d:5.025s" x="23" y="110" width="18" height="18" rx="3"/>
+            <rect class="gone" style="--d:6.281s" x="47" y="110" width="18" height="18" rx="3"/>
+            <rect class="gone" style="--d:7.538s" x="23" y="136" width="18" height="18" rx="3"/>
+            <rect class="gone" style="--d:8.794s" x="47" y="136" width="18" height="18" rx="3"/>
+            <rect class="came" style="--d:1.256s" x="235" y="58" width="18" height="18" rx="3"/>
+            <rect class="came" style="--d:2.513s" x="259" y="58" width="18" height="18" rx="3"/>
+            <rect class="came" style="--d:3.769s" x="235" y="84" width="18" height="18" rx="3"/>
+            <rect class="came" style="--d:5.025s" x="259" y="84" width="18" height="18" rx="3"/>
+            <rect class="came" style="--d:6.281s" x="235" y="110" width="18" height="18" rx="3"/>
+            <rect class="came" style="--d:7.538s" x="259" y="110" width="18" height="18" rx="3"/>
+            <rect class="came" style="--d:8.794s" x="235" y="136" width="18" height="18" rx="3"/>
+            <rect class="came" style="--d:10.05s" x="259" y="136" width="18" height="18" rx="3"/>
+          </g>
+          <line class="lane" x1="82" y1="104" x2="218" y2="104"/>
+          <circle class="dot ob" style="--t:.41875s;--k:24" cx="88" cy="104" r="5"/>
+          <g class="pill" style="--d:0s"><rect x="83" y="120" width="42" height="20" rx="10"/></g>
+          <g class="pill" style="--d:.41875s"><rect x="129" y="120" width="42" height="20" rx="10"/></g>
+          <g class="pill" style="--d:.8375s"><rect x="175" y="120" width="42" height="20" rx="10"/></g>
+          <rect class="track" x="40" y="184" width="220" height="6" rx="3"/>
+          <rect class="bar ob clock" style="--t:10.05s" x="40" y="184" width="220" height="6" rx="3"/>
+          <!-- i18n: translatable strings for this panel -->
+          <g class="labels">
+            <text class="h" x="150" y="20">以前：1 つずつ</text>
+            <text class="s" x="150" y="39">100 KB のファイル 1,000 個</text>
+            <text class="c sm b" x="44" y="165">Mac</text>
+            <text class="c sm b" x="256" y="165">S3</text>
+            <text class="c m sm" x="104" y="134">HEAD</text>
+            <text class="c m sm" x="150" y="134">HEAD</text>
+            <text class="c m sm" x="196" y="134">PUT</text>
+            <text class="c sm mu" x="150" y="158">1 ファイルに往復 3 回</text>
+            <text class="timer" x="150" y="222" data-timer="10.05" data-unit=" 秒">10.05 秒</text>
+          </g>
+        </svg>
+        <svg viewBox="0 0 300 230" role="img" aria-labelledby="race-new-t race-new-d">
+          <title id="race-new-t">現在：多くのファイルを同時に</title>
+          <desc id="race-new-d">同じ 100 KB のファイル 1,000 個を、接続とメモリの予算を共有しながら多数同時にアップロード。合計 0.72 秒。</desc>
+          <rect class="box" x="12" y="50" width="64" height="120" rx="8"/>
+          <rect class="box" x="224" y="50" width="64" height="120" rx="8"/>
+          <g class="nb">
+            <rect class="gone" style="--d:.01s" x="23" y="58" width="18" height="18" rx="3"/>
+            <rect class="gone" style="--d:.02s" x="47" y="58" width="18" height="18" rx="3"/>
+            <rect class="gone" style="--d:.03s" x="23" y="84" width="18" height="18" rx="3"/>
+            <rect class="gone" style="--d:.04s" x="47" y="84" width="18" height="18" rx="3"/>
+            <rect class="gone" style="--d:.05s" x="23" y="110" width="18" height="18" rx="3"/>
+            <rect class="gone" style="--d:.06s" x="47" y="110" width="18" height="18" rx="3"/>
+            <rect class="gone" style="--d:.07s" x="23" y="136" width="18" height="18" rx="3"/>
+            <rect class="gone" style="--d:.08s" x="47" y="136" width="18" height="18" rx="3"/>
+            <rect class="came" style="--d:.66s" x="235" y="58" width="18" height="18" rx="3"/>
+            <rect class="came" style="--d:.68s" x="259" y="58" width="18" height="18" rx="3"/>
+            <rect class="came" style="--d:.70s" x="235" y="84" width="18" height="18" rx="3"/>
+            <rect class="came" style="--d:.72s" x="259" y="84" width="18" height="18" rx="3"/>
+            <rect class="came" style="--d:.66s" x="235" y="110" width="18" height="18" rx="3"/>
+            <rect class="came" style="--d:.68s" x="259" y="110" width="18" height="18" rx="3"/>
+            <rect class="came" style="--d:.70s" x="235" y="136" width="18" height="18" rx="3"/>
+            <rect class="came" style="--d:.72s" x="259" y="136" width="18" height="18" rx="3"/>
+          </g>
+          <g class="lanes">
+            <line class="lane" x1="82" y1="62" x2="218" y2="62"/>
+            <line class="lane" x1="82" y1="76" x2="218" y2="76"/>
+            <line class="lane" x1="82" y1="90" x2="218" y2="90"/>
+            <line class="lane" x1="82" y1="104" x2="218" y2="104"/>
+            <line class="lane" x1="82" y1="118" x2="218" y2="118"/>
+            <line class="lane" x1="82" y1="132" x2="218" y2="132"/>
+            <line class="lane" x1="82" y1="146" x2="218" y2="146"/>
+            <line class="lane" x1="82" y1="160" x2="218" y2="160"/>
+          </g>
+          <g class="nb">
+            <circle class="dot" style="--t:.22s;--k:3;--d:0s" cx="88" cy="62" r="4"/>
+            <circle class="dot" style="--t:.22s;--k:3;--d:.02s" cx="88" cy="76" r="4"/>
+            <circle class="dot" style="--t:.22s;--k:3;--d:.04s" cx="88" cy="90" r="4"/>
+            <circle class="dot" style="--t:.22s;--k:3;--d:.06s" cx="88" cy="104" r="4"/>
+            <circle class="dot" style="--t:.22s;--k:3;--d:0s" cx="88" cy="118" r="4"/>
+            <circle class="dot" style="--t:.22s;--k:3;--d:.02s" cx="88" cy="132" r="4"/>
+            <circle class="dot" style="--t:.22s;--k:3;--d:.04s" cx="88" cy="146" r="4"/>
+            <circle class="dot" style="--t:.22s;--k:3;--d:.06s" cx="88" cy="160" r="4"/>
+          </g>
+          <rect class="track" x="40" y="184" width="220" height="6" rx="3"/>
+          <rect class="bar nb clock" style="--t:.72s" x="40" y="184" width="15.76" height="6" rx="3"/>
+          <!-- i18n: translatable strings for this panel -->
+          <g class="labels">
+            <text class="h" x="150" y="20">現在：まとめて同時に</text>
+            <text class="s" x="150" y="39">100 KB のファイル 1,000 個</text>
+            <text class="c sm b" x="44" y="165">Mac</text>
+            <text class="c sm b" x="256" y="165">S3</text>
+            <text class="timer" x="150" y="222" data-timer="0.72" data-unit=" 秒">0.72 秒</text>
+          </g>
+        </svg>
+      </div>
+      <button class="replay" type="button" hidden>↻ もう一度</button>
+      <figcaption>100 KB のファイル 1,000 個のアップロード。「以前」は 1 つずつで、ファイルごとに往復 3 回を順番に待ちます。「現在」は多数を同時に送ります。タイマーは実時間で進み、2 本の進捗バーは同じ目盛りです。四角は説明のための図です。</figcaption>
+    </figure>
+
+    <h2>1 バイトずつ</h2>
+    <p>1 GiB のダウンロードに 31 秒、同じファイルのアップロードには 1 秒。相手がローカルの MinIO なら、ネットワークが原因のはずがありません。</p>
+    <p>測ってみて分かりました。CPU は 1 コアに張りつき、サンプルの 97% が同じ場所に落ちていました。Swift の <code>URLSession.AsyncBytes</code> はデータを 1 バイトずつ渡してきます。私たちのコードはそのペースのまま、<code>Data</code> に 1 バイトずつ追記していました。1 GiB なら追記は 10 億回。1 回ごとは安くても、合計すると 31 秒です。</p>
+
+    <figure class="fig anim" id="fig-bytes">
+      <div class="pair">
+        <svg viewBox="0 0 300 232" role="img" aria-labelledby="bytes-old-t bytes-old-d">
+          <title id="bytes-old-t">以前：1 バイトずつ</title>
+          <desc id="bytes-old-d">データが砂粒のように 1 バイトずつバケツに落ち、なかなか満ちません。横の CPU メーターはずっと満杯で、user CPU 30 秒。</desc>
+          <g class="grains">
+            <circle class="grain" style="--y:0px;--d:0s" cx="108" cy="48" r="2.2"/>
+            <circle class="grain" style="--y:10px;--d:-.1s" cx="113" cy="48" r="2.2"/>
+            <circle class="grain" style="--y:20px;--d:-.2s" cx="104" cy="48" r="2.2"/>
+            <circle class="grain" style="--y:30px;--d:-.3s" cx="111" cy="48" r="2.2"/>
+            <circle class="grain" style="--y:40px;--d:-.4s" cx="116" cy="48" r="2.2"/>
+            <circle class="grain" style="--y:50px;--d:-.5s" cx="106" cy="48" r="2.2"/>
+            <circle class="grain" style="--y:60px;--d:-.6s" cx="110" cy="48" r="2.2"/>
+            <circle class="grain" style="--y:70px;--d:-.7s" cx="114" cy="48" r="2.2"/>
+            <circle class="grain" style="--y:80px;--d:-.8s" cx="105" cy="48" r="2.2"/>
+            <circle class="grain" style="--y:90px;--d:-.9s" cx="112" cy="48" r="2.2"/>
+            <circle class="grain" style="--y:100px;--d:-1s" cx="108" cy="48" r="2.2"/>
+            <circle class="grain" style="--y:110px;--d:-1.1s" cx="115" cy="48" r="2.2"/>
+          </g>
+          <clipPath id="bk-old"><path d="M40 100 L55 190 L165 190 L180 100 Z"/></clipPath>
+          <rect class="sand ob" clip-path="url(#bk-old)" x="40" y="170" width="140" height="20"/>
+          <path class="bucket" d="M40 100 L55 190 L165 190 L180 100"/>
+          <rect class="meter" x="226" y="70" width="32" height="120" rx="4"/>
+          <rect class="cpu hot" x="229" y="73" width="26" height="114" rx="2"/>
+          <!-- i18n: translatable strings for this panel -->
+          <g class="labels">
+            <text class="h" x="150" y="20">以前：1 バイトずつ</text>
+            <text class="s m" x="150" y="39">URLSession.AsyncBytes → Data</text>
+            <text class="c sm b" x="242" y="62">CPU</text>
+            <text class="c sm b bad" x="242" y="206">張りつき</text>
+            <text class="c" x="150" y="226">user CPU 30 秒</text>
+          </g>
+        </svg>
+        <svg viewBox="0 0 300 232" role="img" aria-labelledby="bytes-new-t bytes-new-d">
+          <title id="bytes-new-t">現在：届いたかたまりをそのまま処理</title>
+          <desc id="bytes-new-d">ネットワークから届いたデータがかたまりごとにバケツに落ち、すぐに満ちます。横の CPU メーターはほぼ空で、user CPU 0.25 秒。</desc>
+          <g class="nb">
+            <rect class="chunk" style="--d:.2s;--f:-120px" x="60" y="170" width="100" height="18" rx="3"/>
+            <rect class="chunk" style="--d:.6s;--f:-100px" x="60" y="150" width="100" height="18" rx="3"/>
+            <rect class="chunk" style="--d:1s;--f:-80px" x="60" y="130" width="100" height="18" rx="3"/>
+            <rect class="chunk" style="--d:1.4s;--f:-60px" x="60" y="110" width="100" height="18" rx="3"/>
+          </g>
+          <path class="bucket" d="M40 100 L55 190 L165 190 L180 100"/>
+          <rect class="meter" x="226" y="70" width="32" height="120" rx="4"/>
+          <rect class="cpu cool" x="229" y="73" width="26" height="114" rx="2"/>
+          <!-- i18n: translatable strings for this panel -->
+          <g class="labels">
+            <text class="h" x="150" y="20">現在：かたまりで受け取る</text>
+            <text class="s m" x="150" y="39">URLSession delegate</text>
+            <text class="c sm b" x="242" y="62">CPU</text>
+            <text class="c sm b" x="242" y="206">ほぼ待機</text>
+            <text class="c" x="150" y="226">user CPU 0.25 秒</text>
+          </g>
+        </svg>
+      </div>
+      <button class="replay" type="button" hidden>↻ もう一度</button>
+      <figcaption>以前：データを 1 バイトずつ追記し、CPU は 1 コアに張りついています。現在：ネットワークから届いたかたまりをそのまま受け取り、CPU にはほとんど仕事がありません。user CPU は 30 秒から 0.25 秒に下がりました。</figcaption>
+    </figure>
+
+    <p>直し方は delegate に切り替えることでした。ネットワークがかたまりを渡してきたら、かたまりのまま受け取ります。1 GiB は 0.48 秒になり、user CPU は 30 秒から 0.25 秒に下がりました。5 GiB は 160 秒から 7.3 秒に。このサイズになると、ボトルネックはもうコードではなく、SSD とメモリキャッシュです。</p>
+
+    <figure class="fig" id="fig-chart">
+      <svg class="solo" viewBox="0 0 336 222" role="img" aria-labelledby="chart-t chart-d">
+        <title id="chart-t">ダウンロード時間（対数目盛り）</title>
+        <desc id="chart-d">1 GiB のダウンロード：以前 31.3 秒、現在 0.48 秒。5 GiB のダウンロード：以前 160 秒、現在 7.3 秒。横軸は対数目盛りで、1 目盛りが 10 倍です。</desc>
+        <g class="grid">
+          <line class="gridl" x1="64" y1="28" x2="64" y2="172"/>
+          <line class="gridl" x1="125.5" y1="28" x2="125.5" y2="172"/>
+          <line class="gridl" x1="187" y1="28" x2="187" y2="172"/>
+          <line class="gridl" x1="248.5" y1="28" x2="248.5" y2="172"/>
+          <line class="gridl" x1="310" y1="28" x2="310" y2="172"/>
+          <line class="axis" x1="64" y1="172" x2="310" y2="172"/>
+        </g>
+        <rect class="ob" x="64" y="4" width="12" height="12" rx="2"/>
+        <rect class="nb" x="124" y="4" width="12" height="12" rx="2"/>
+        <rect class="ob" x="64" y="48" width="153.48" height="18" rx="3"/>
+        <rect class="nb" x="64" y="70" width="41.9" height="18" rx="3"/>
+        <rect class="ob" x="64" y="118" width="197.05" height="18" rx="3"/>
+        <rect class="nb" x="64" y="140" width="114.59" height="18" rx="3"/>
+        <!-- i18n: translatable strings for this chart -->
+        <g class="labels">
+          <text x="81" y="15">以前</text>
+          <text x="141" y="15">現在</text>
+          <text class="b" x="64" y="41">1 GiB のダウンロード</text>
+          <text class="b" x="64" y="111">5 GiB のダウンロード</text>
+          <text class="e mu" x="56" y="62">以前</text>
+          <text class="e mu" x="56" y="84">現在</text>
+          <text class="e mu" x="56" y="132">以前</text>
+          <text class="e mu" x="56" y="154">現在</text>
+          <text class="b halo" x="221.5" y="62">31.3 秒</text>
+          <text class="b halo" x="109.9" y="84">0.48 秒</text>
+          <text class="b halo" x="265" y="132">160 秒</text>
+          <text class="b halo" x="182.6" y="154">7.3 秒</text>
+          <text class="c sm mu" x="64" y="188">0.1</text>
+          <text class="c sm mu" x="125.5" y="188">1</text>
+          <text class="c sm mu" x="187" y="188">10</text>
+          <text class="c sm mu" x="248.5" y="188">100</text>
+          <text class="c sm mu" x="310" y="188">1000</text>
+          <text class="c" x="187" y="212">ダウンロード時間（秒）· 対数、1 目盛り 10 倍</text>
+        </g>
+      </svg>
+      <figcaption>ダウンロード時間。横軸は対数目盛りです。1 GiB：31.3 秒 → 0.48 秒、5 GiB：160 秒 → 7.3 秒。M4 Mac mini 上でローカルの MinIO に対して測定。</figcaption>
+    </figure>
+
+    <p>ついでに、とっくにあるべきだったチェックも足しました。受け取ったバイト数は、サーバーが宣言した <code>Content-Length</code> と一致しなければなりません。一致しなければ失敗とし、途中で切れたファイルを正式なファイル名に改名することはしません。</p>
+
+    <h2>分割ダウンロード</h2>
+    <p>大きなファイルをローカルにダウンロードするときは、いまは複数の範囲に分けて同時に取得し、それぞれを <code>pwrite</code> で一時ファイルの対応する位置に書き込みます。すべて揃ってから、正式なファイル名に改名します。どの範囲もオブジェクトの ETag に結びついているので、ダウンロード中に誰かがファイルを差し替えると次の範囲リクエストは拒否され、ダウンロード全体が失敗になります。半分が古く半分が新しいファイルを組み上げることはありません。範囲ごとに個別にリトライできます。</p>
+
+    <figure class="fig anim" id="fig-ranges">
+      <svg class="solo" viewBox="0 0 340 230" role="img" aria-labelledby="ranges-t ranges-d">
+        <title id="ranges-t">分割ダウンロード</title>
+        <desc id="ranges-d">クラウドのオブジェクトを 4 つの範囲に分けて同時にダウンロードし、それぞれを一時ファイルの対応する位置に書き込みます。範囲 3 が失敗し、その範囲だけを取り直します。4 つが揃うと、一時ファイルを正式なファイル名に改名します。</desc>
+        <rect class="seg" x="20" y="34" width="75" height="26"/>
+        <rect class="seg" x="95" y="34" width="75" height="26"/>
+        <rect class="seg" x="170" y="34" width="75" height="26"/>
+        <rect class="seg" x="245" y="34" width="75" height="26"/>
+        <g class="lanes">
+          <line class="lane" x1="57.5" y1="66" x2="57.5" y2="164"/>
+          <line class="lane" x1="132.5" y1="66" x2="132.5" y2="164"/>
+          <line class="lane" x1="207.5" y1="66" x2="207.5" y2="164"/>
+          <line class="lane" x1="282.5" y1="66" x2="282.5" y2="164"/>
+        </g>
+        <circle class="fdot" style="--d:.2s;--k:5.6" cx="57.5" cy="70" r="4"/>
+        <circle class="fdot" style="--d:.2s;--k:6.8" cx="132.5" cy="70" r="4"/>
+        <circle class="fdot" style="--d:.2s;--k:2.8" cx="207.5" cy="70" r="4"/>
+        <circle class="fdot" style="--d:2.4s;--k:4.4" cx="207.5" cy="70" r="4"/>
+        <circle class="fdot" style="--d:.2s;--k:5.2" cx="282.5" cy="70" r="4"/>
+        <rect class="tmp" x="20" y="168" width="300" height="30" rx="4"/>
+        <g class="nb">
+          <rect class="fill f1" x="21" y="169" width="74" height="28"/>
+          <rect class="fill f2" x="95" y="169" width="75" height="28"/>
+          <rect class="fill f3" x="170" y="169" width="75" height="28"/>
+          <rect class="fill f4" x="245" y="169" width="74" height="28"/>
+        </g>
+        <line class="slot" x1="95" y1="168" x2="95" y2="198"/>
+        <line class="slot" x1="170" y1="168" x2="170" y2="198"/>
+        <line class="slot" x1="245" y1="168" x2="245" y2="198"/>
+        <!-- i18n: translatable strings for this figure -->
+        <g class="labels">
+          <text x="20" y="24">オブジェクト · 範囲ごとに ETag を固定</text>
+          <text class="c sm" x="57.5" y="51">範囲 1</text>
+          <text class="c sm" x="132.5" y="51">範囲 2</text>
+          <text class="c sm" x="207.5" y="51">範囲 3</text>
+          <text class="c sm" x="282.5" y="51">範囲 4</text>
+          <text class="tmpname" x="20" y="218">一時ファイル（各位置に <tspan class="m">pwrite</tspan>）</text>
+          <text class="final" x="20" y="218">全部揃った → 正式な名前に改名 ✓</text>
+          <text class="c fail halo" x="207.5" y="158">失敗</text>
+          <text class="c retry halo" x="207.5" y="158">この範囲だけ取り直す</text>
+        </g>
+      </svg>
+      <button class="replay" type="button" hidden>↻ もう一度</button>
+      <figcaption>1 つのファイルを 4 つの範囲に分けて同時にダウンロードし、それぞれ一時ファイルの対応する位置に書き込みます。範囲 3 が失敗したら、その範囲だけを取り直します。4 つが揃ってはじめて、正式なファイル名に改名します。</figcaption>
+    </figure>
+
+    <p>正直に言うと、ローカルの MinIO ではこの効果は見えません。接続 1 本ですでに上限まで出ているからです。価値があるのは実際のネットワークです。多くの経路は接続 1 本あたりの速度を制限しているので、そういうときに複数の範囲を同時に開くことが差になります。</p>
+
+    <h2>1 時間</h2>
+    <p><code>URLSession</code> にはタイムアウトが 2 種類あります。ひとつは「何も届かない状態がどれだけ続いたか」で、30 秒にしています。もうひとつは「リクエスト全体にかけてよい最大時間」で、3600 秒にしていました。アップロードは多数のパートに分かれていて、どれも短いので、後者に当たったことはありません。ところがダウンロードは 1 つのリクエストを最初から最後まで読みます。100 GB のファイルは 25 MB/s で 67 分かかり、60 分目で必ず切られていました。</p>
+    <p>いまは全体の上限を 7 日にし、接続がまだ生きているかの判断は 30 秒のほうに任せています。</p>
+
+    <h2>リトライと、リトライしてはいけないもの</h2>
+    <p>以前リトライしていたのは大きなファイルのマルチパートアップロードだけで、しかも一巡まるごとやり直していました。ソースを 0 バイト目から読み直し、パートごとに hash を計算し直すのです。小さなファイルのアップロード、ダウンロード、一覧、HEAD は、503 が一度来れば失敗でした。</p>
+    <p>いまはリクエストごとに独自のリトライがあります。待ち時間は指数的に伸び、ランダムな揺らぎを加えて、大勢のリクエストが一斉に戻ってぶつからないようにします。サーバーが <code>Retry-After</code> を返せばそのとおり待ち、認証情報が期限切れなら一度だけ更新してやり直します。</p>
+    <p>レビューはここで 2 つのことを見つけました。1 つ目は、やみくもに送り直してはいけないリクエストがあることです。「マルチパートアップロードの作成」の結果が不明なときに送り直すと、upload が 2 つできかねません。「アップロードの完了」の結果が不明なら、もう一度押すのではなく、前回書いた照合の手順を通すべきです。この 2 つは、いまはリトライしません。2 つ目は、<code>Retry-After</code> の上限を外したあと、とんでもなく大きな値（たとえば 10¹¹ 秒）がナノ秒への変換でオーバーフローし、アプリがそのままクラッシュしたことです。いまは最大値で打ち切ります。</p>
+
+    <h2>ひとつの挙動の変更</h2>
+    <p>レビューは、私たちが考えていなかった問いも投げてきました。小さなファイルがスキャンのあと、読み込みの前に大きくなったらどうなるか。答えは、新しいサイズのまま丸ごとメモリに読み込むのに、メモリの枠は古いサイズの分しか確保していない、というものでした。</p>
+    <p>私たちは失敗させることを選びました。読んだ内容がスキャン時のサイズを超えた時点で、そのファイルは今回は止まり、エラーメッセージは <code>Source size changed</code> です。大きなファイルがずっとそうしてきたのと同じ挙動です。まだ書き込み中のファイルは今回はアップロードされず、もう一度実行すればアップロードされます。完全だと思われてしまうファイルを上げるより、書きかけのファイルを 1 つ上げ損ねるほうを選びます。</p>
+
+    <div class="callout"><strong>現在の状態。</strong>以上の改善は、次のリリース 0.3.0 で反映されます。クラウド間の転送（たとえば S3 → R2）は、いまもソース全体を 1 つのリクエストで読み、リトライ時は最初から読み直します。これも範囲読みに切り替えるのが次の作業です（<a href="https://github.com/oablab/rocketbucket/issues/15">#15</a>）。同じサービス内ではクラウド側でコピーさせ、Mac を経由しないようにすることもリストに入っています。</div>
+    <p class="outro">RocketBucket は S3、R2、B2、MinIO のためのデュアルペイン・ファイル転送アプリで、<a href="https://apps.apple.com/app/id6810038461">Mac App Store で公開中</a>です。<a href="https://rocketbucket.app/ja/">rocketbucket.app</a></p>
+  </main>
+
+  <footer>
+    © 2026 RocketBucket · <a href="/ja/">rocketbucket.app</a> · <a href="/ja/notes/">開発ノート</a> · <a href="/privacy/">プライバシー</a> · <a href="mailto:tautiu.dev@gmail.com">サポート</a>
+  </footer>
+  <script>
+  (function () {
+    var d = document;
+    function clockOf(t) {
+      var c = t.ownerSVGElement.querySelector('.clock');
+      var a = c && c.getAnimations ? c.getAnimations() : [];
+      return a[0];
+    }
+    function update() {
+      var running = false;
+      [].forEach.call(d.querySelectorAll('[data-timer]'), function (t) {
+        var a = clockOf(t);
+        if (!a) return;
+        var s = Math.min(+t.getAttribute('data-timer'), (a.currentTime || 0) / 1000);
+        var txt = s.toFixed(2) + t.getAttribute('data-unit');
+        if (t.textContent !== txt) t.textContent = txt;
+        if (a.playState === 'running') running = true;
+      });
+      return running;
+    }
+    var looping = false;
+    function loop() { if (update()) requestAnimationFrame(loop); else looping = false; }
+    function kick() { if (!looping) { looping = true; requestAnimationFrame(loop); } }
+    window.__figUpdate = update;
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    var figs = [].slice.call(d.querySelectorAll('.fig.anim'));
+    figs.forEach(function (f) {
+      var b = f.querySelector('.replay');
+      b.hidden = false;
+      b.addEventListener('click', function () {
+        f.classList.add('reset');
+        void f.getBoundingClientRect();
+        f.classList.remove('reset');
+        f.classList.add('go');
+        kick();
+      });
+    });
+    if ('IntersectionObserver' in window) {
+      var io = new IntersectionObserver(function (es) {
+        es.forEach(function (e) { e.target.classList.toggle('go', e.isIntersecting); });
+        kick();
+      }, { threshold: 0.4 });
+      figs.forEach(function (f) { io.observe(f); });
+    } else {
+      figs.forEach(function (f) { f.classList.add('go'); });
+    }
+    update();
+  })();
+  </script>
+</body>
+</html>
