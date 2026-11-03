@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Per-language OG cards for a dev note.
 
-usage: og_note.py <notes/<slug>> — reads TITLES below, writes og-<lang>.png
+usage: og_note.py <notes/<slug>> — reads NOTES[slug] below, writes og-card.png
+for every language that note has copy for.
 """
 import random, sys
 from PIL import Image, ImageDraw, ImageFont
@@ -10,18 +11,26 @@ SLUG_DIR = sys.argv[1]
 W, H = 1200, 630
 TEXT_MAX_X = 824   # artwork starts at 830
 
-TITLES = {
+TITLES_500 = {
     "en": ["500 GB to R2, stopped,", "and started again."],
     "zh": ["500 GB 傳上 R2，", "中斷，再接著傳"],
     "ja": ["500 GB を R2 へ、止めて、", "また続ける"],
     "ko": ["500 GB를 R2로, 멈추고,", "다시 이어가기"],
 }
-SUBS = {
+SUBS_500 = {
     "en": "Multipart upload & resume · peak memory ~900 MB–1 GB",
     "zh": "分段上傳與續傳 · 記憶體峰值約 900 MB–1 GB",
     "ja": "マルチパート再開 · ピークメモリ約 900 MB–1 GB",
     "ko": "멀티파트 이어올리기 · 최대 메모리 약 900 MB–1 GB",
 }
+NOTES = {
+    "500-gb-not-sure": (TITLES_500, SUBS_500),
+    "one-byte-at-a-time": (
+        {"zh": ["一次一個位元組：", "下載慢 28 倍，小檔排隊"]},
+        {"zh": "千個小檔 10.05 → 0.72 秒 · 1 GiB 下載 31 → 0.48 秒"},
+    ),
+}
+TITLES, SUBS = NOTES[SLUG_DIR.rstrip("/").split("/")[-1]]
 FONTS = {  # (path, bold index, regular index)
     "en": ("/System/Library/Fonts/HelveticaNeue.ttc", 1, 0),
     "zh": ("/System/Library/Fonts/Hiragino Sans GB.ttc", 2, 0),
